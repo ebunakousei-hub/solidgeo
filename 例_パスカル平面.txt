@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────
+#  パスカルの定理の三次元版（パスカル「平面」）
+#  球面上に 3 つの円をとる。どの 2 つも 2 点で交わるようにする。
+#  6 つの交点がつくる六角形は、向かい合う辺どうしが必ず交わる。
+#  その 3 交点 Xa, Xb, Xc は共線ではないが、
+#  「3 円の平面の共有点 Z の、球に関する極平面」の上に必ず乗る。
+# ─────────────────────────────────────────────────────────────
+O=(0,0,0)
+S=Sphere(O,1)
+N1=(0.7,0.2,1)
+N2=(1,-0.6,0.3)
+N3=(0.2,0.9,1)
+Q1=(0.4,-0.2,0.1)
+Q2=(-0.2,0.35,0.1)
+Q3=(0.1,0.1,-0.3)
+pi1=PerpendicularPlane(Q1,Line(O,N1))
+pi2=PerpendicularPlane(Q2,Line(O,N2))
+pi3=PerpendicularPlane(Q3,Line(O,N3))
+c1=Intersect(pi1,S)
+c2=Intersect(pi2,S)
+c3=Intersect(pi3,S)
+l12=Intersect(pi1,pi2)
+l13=Intersect(pi1,pi3)
+l23=Intersect(pi2,pi3)
+A1=Intersect(l13,S,1)
+A4=Intersect(l13,S,2)
+A2=Intersect(l12,S,1)
+A5=Intersect(l12,S,2)
+A3=Intersect(l23,S,1)
+A6=Intersect(l23,S,2)
+Z=Intersect(l12,pi3)
+# 六角形の辺
+e1=Line(A1,A2)
+e4=Line(A4,A5)
+e2=Line(A2,A3)
+e5=Line(A5,A6)
+e3=Line(A3,A4)
+e6=Line(A6,A1)
+# 向かい合う辺の交点
+Xa=Intersect(e1,e4)
+Xb=Intersect(e2,e5)
+Xc=Intersect(e3,e6)
+Pi=Plane(Xa,Xb,Xc)
+# ---- 確かめ ----
+vZ1=Distance(Z,Line(A1,A4))
+vZ2=Distance(Z,Line(A2,A5))
+vZ3=Distance(Z,Line(A3,A6))
+vFoot=Distance(Foot(O,Pi),Line(O,Z))
+vDz=Distance(O,Z)
+vDpi=Distance(O,Pi)
+vCol=Distance(Xc,Line(Xa,Xb))

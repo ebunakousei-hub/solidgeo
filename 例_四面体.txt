@@ -1,0 +1,15 @@
+# 四面体とその外接球・内接球・重心
+# SolidGeo で「作図を読込」から開けます
+A=(0,0,0)
+B=(4,0,0)
+C=(0,4,0)
+D=(1,1,4)
+h1=Hull(A,B,C,D)
+s1=Circumsphere(h1)
+s2=Insphere(h1)
+g1=Centroid(h1)
+M=Midpoint(A,B)
+p1=PerpBisector(A,B)
+w1=Angle(B,A,C)
+n1=Volume(h1)
+n2=Area(h1)

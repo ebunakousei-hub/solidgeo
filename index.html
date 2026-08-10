@@ -1,0 +1,3390 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>SolidGeo ― 立体幾何</title>
+<style>
+:root{
+  --bg1:#f8fafd; --bg2:#e9eff7; --panel:#fafbfd; --alt:#f0f3f8; --line:#dbe1ea;
+  --text:#1c222e; --dim:#707c8e; --accent:#2366d6; --accent2:#c82d37;
+  --btn:#fff; --btnHot:#ecf2fc; --btnDn:#d6e2f6; --head:#e8edf4; --field:#fff;
+}
+.dark{
+  --bg1:#1b1f28; --bg2:#0e1116; --panel:#181b22; --alt:#1f232c; --line:#343a46;
+  --text:#e4e9f1; --dim:#8c96a6; --accent:#6096ff; --accent2:#ff6e6e;
+  --btn:#262b35; --btnHot:#323a4a; --btnDn:#404a5e; --head:#1e222a; --field:#14171d;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;
+  font-family:"Yu Gothic UI","Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",system-ui,sans-serif;
+  color:var(--text);background:var(--panel)}
+#app{display:flex;height:100%;width:100%}
+#tools{width:200px;flex:none;background:var(--panel);border-right:1px solid var(--line);
+  display:flex;flex-direction:column}
+#tools h2,#panel h2{margin:0;padding:7px 12px;font-size:14px;background:var(--head);
+  border-bottom:1px solid var(--line);font-weight:700}
+#toolgrid{flex:1;overflow-y:auto;padding:8px;display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start}
+#toolgrid button{font:inherit;font-size:11.5px;padding:6px 2px;border:1px solid var(--line);
+  background:var(--btn);color:var(--text);border-radius:4px;cursor:pointer;white-space:nowrap;overflow:hidden}
+#toolgrid button:hover{background:var(--btnHot)}
+#toolgrid button.on{background:var(--btnDn);border-color:var(--accent);color:var(--accent);font-weight:700}
+#main{flex:1;display:flex;flex-direction:column;min-width:0}
+#view{flex:1;position:relative;min-height:0}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:default}
+#cmdbar{flex:none;background:var(--head);border-top:1px solid var(--line);padding:6px 10px 4px}
+#cmd{width:100%;font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--line);
+  border-radius:4px;background:var(--field);color:var(--text)}
+#cmd:focus{outline:none;border-color:var(--accent)}
+#msg{font-size:11.5px;color:var(--dim);padding:3px 2px 0;height:18px;overflow:hidden;white-space:nowrap}
+#msg.err{color:var(--accent2)}
+#panel{width:320px;flex:none;background:var(--panel);border-left:1px solid var(--line);
+  display:flex;flex-direction:column}
+#objlist{overflow-y:auto;flex:1;min-height:80px}
+.row{display:flex;align-items:center;gap:7px;padding:5px 10px;cursor:pointer;border-bottom:1px solid transparent}
+.row:hover{background:var(--alt)}
+.row.sel{background:var(--btnDn)}
+.row .vis{position:relative;width:14px;height:14px;flex:none;border:1px solid var(--line);border-radius:3px;background:var(--btn);cursor:pointer}
+/* 升目そのものは小さいので、押せる範囲だけを行の高さいっぱいに広げる（見た目は変えない） */
+.row .vis::after{content:'';position:absolute;left:-5px;right:-5px;top:-11px;bottom:-11px}
+.row .vis.on{background:var(--accent);border-color:var(--accent)}
+.row .sw{width:9px;height:9px;flex:none;border-radius:2px}
+.row .nm{font-weight:700;font-size:13px;flex:none}
+.row .kd{font-size:11px;color:var(--dim);flex:none}
+.row .vl{font-size:11.5px;color:var(--dim);font-family:ui-monospace,Menlo,Consolas,monospace;
+  margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row.bad .vl{color:var(--accent2)}
+.row.ghost{opacity:.62}
+.row .tw{width:13px;flex:none;font-size:10px;color:var(--dim);text-align:center;cursor:pointer;user-select:none}
+.row .tw:hover{color:var(--accent)}
+#opts{flex:none;border-top:1px solid var(--line);padding:8px 10px;overflow-y:auto;max-height:46%}
+#opts h3{margin:10px 0 5px;font-size:12px;color:var(--accent);font-weight:700;
+  border-left:3px solid var(--accent);padding-left:7px}
+#opts h3:first-child{margin-top:0}
+label.ck{display:flex;align-items:center;gap:7px;font-size:12.5px;padding:2px 0;cursor:pointer}
+label.ck input{accent-color:var(--accent);width:14px;height:14px}
+.sl{font-size:11.5px;color:var(--dim);margin-top:4px}
+.sl input{width:100%;accent-color:var(--accent)}
+.bgrid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px}
+.bgrid button,.wide{font:inherit;font-size:12px;padding:5px;border:1px solid var(--line);
+  background:var(--btn);color:var(--text);border-radius:4px;cursor:pointer}
+.bgrid button:hover,.wide:hover{background:var(--btnHot)}
+.wide{width:100%;margin-top:5px}
+#hint{position:absolute;left:10px;top:8px;font-size:11.5px;color:var(--dim);
+  background:rgba(255,255,255,.72);padding:3px 8px;border-radius:4px;pointer-events:none}
+.dark #hint{background:rgba(20,23,29,.72)}
+#burger{display:none}
+@media (max-width:820px){
+  #tools{position:absolute;left:0;top:0;bottom:0;z-index:9;box-shadow:0 0 20px rgba(0,0,0,.2)}
+  #panel{position:absolute;right:0;top:0;bottom:0;z-index:9;box-shadow:0 0 20px rgba(0,0,0,.2)}
+  #tools.hide,#panel.hide{display:none}
+  #burger{display:flex;gap:6px;position:absolute;right:10px;top:8px;z-index:10}
+  #burger button{font:inherit;font-size:12px;padding:5px 9px;border:1px solid var(--line);
+    background:var(--btn);color:var(--text);border-radius:4px}
+}
+</style>
+
+<div id="app">
+  <div id="tools"><h2>道具</h2><div id="toolgrid"></div></div>
+  <div id="main">
+    <div id="view">
+      <canvas id="cv"></canvas>
+      <div id="hint"></div>
+      <div id="burger"><button id="bTools">道具</button><button id="bPanel">一覧</button></div>
+    </div>
+    <div id="cmdbar">
+      <input id="cmd" placeholder="コマンド欄：例  Midpoint(A,B) ／ 球(A,B) ／ Angle(A,B,C) ／ 凸包(A,B,C,D)">
+      <div id="msg"></div>
+    </div>
+  </div>
+  <div id="panel">
+    <h2>対象一覧</h2>
+    <div id="objlist"></div>
+    <div id="opts"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ===========================================================================
+//  SolidGeo (Web 版) ― 立体幾何の動的作図
+//  Windows 版 (C++) の geo.h をそのまま移植したもの。数学の中身は同一。
+// ===========================================================================
+
+// ---------------------------------------------------------------- 1. 数学
+const PI = Math.PI;
+const V = (x, y, z) => ({ x, y, z });
+const add = (a, b) => V(a.x + b.x, a.y + b.y, a.z + b.z);
+const sub = (a, b) => V(a.x - b.x, a.y - b.y, a.z - b.z);
+const mul = (a, s) => V(a.x * s, a.y * s, a.z * s);
+const neg = a => V(-a.x, -a.y, -a.z);
+const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+const cross = (a, b) => V(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+const len2 = a => dot(a, a);
+const len = a => Math.sqrt(dot(a, a));
+const norm = a => { const l = len(a); return l > 1e-300 ? mul(a, 1 / l) : V(0, 0, 1); };
+const det3 = (a, b, c) => dot(a, cross(b, c));
+const angBetween = (a, b) => Math.atan2(len(cross(a, b)), dot(a, b));
+const anyPerp = v => norm(cross(v, Math.abs(v.z) < 0.9 ? V(0, 0, 1) : V(1, 0, 0)));
+const clampd = (v, a, b) => v < a ? a : (v > b ? b : v);
+const degOf = r => r * 180 / PI;
+
+// n 元連立一次方程式（M は n 行 (n+1) 列、部分ピボット選択）
+function solveLin(M, n) {
+  for (let c = 0; c < n; c++) {
+    let piv = c, best = Math.abs(M[c * (n + 1) + c]);
+    for (let r = c + 1; r < n; r++) {
+      const v = Math.abs(M[r * (n + 1) + c]);
+      if (v > best) { best = v; piv = r; }
+    }
+    if (best < 1e-13) return null;
+    if (piv !== c) for (let k = 0; k <= n; k++) { const t = M[c * (n + 1) + k]; M[c * (n + 1) + k] = M[piv * (n + 1) + k]; M[piv * (n + 1) + k] = t; }
+    const d = M[c * (n + 1) + c];
+    for (let k = c; k <= n; k++) M[c * (n + 1) + k] /= d;
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const f = M[r * (n + 1) + c];
+      if (f === 0) continue;
+      for (let k = c; k <= n; k++) M[r * (n + 1) + k] -= f * M[c * (n + 1) + k];
+    }
+  }
+  const x = [];
+  for (let i = 0; i < n; i++) x.push(M[i * (n + 1) + n]);
+  return x;
+}
+// 最小二乗（正規方程式）
+function solveLstsq(A, b, m, n) {
+  const M = new Array(n * (n + 1)).fill(0);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      let s = 0;
+      for (let k = 0; k < m; k++) s += A[k * n + i] * A[k * n + j];
+      M[i * (n + 1) + j] = s;
+    }
+    let s = 0;
+    for (let k = 0; k < m; k++) s += A[k * n + i] * b[k];
+    M[i * (n + 1) + n] = s;
+  }
+  return solveLin(M, n);
+}
+
+// ------------------------------------------------------------ 2. 凸包
+function orderRing(p, S, n) {
+  let c = V(0, 0, 0);
+  for (const i of S) c = add(c, p[i]);
+  c = mul(c, 1 / S.length);
+  const u = norm(sub(sub(p[S[0]], c), mul(n, dot(sub(p[S[0]], c), n))));
+  const w = cross(n, u);
+  S.sort((a, b) =>
+    Math.atan2(dot(sub(p[a], c), w), dot(sub(p[a], c), u)) -
+    Math.atan2(dot(sub(p[b], c), w), dot(sub(p[b], c), u)));
+}
+function convexHull(p, eps = 1e-9) {
+  const T = { ok: false, coplanar: false, faces: [], edges: [], deg: [], vertIdx: [], vol: 0, surf: 0 };
+  const n = p.length;
+  T.deg = new Array(Math.max(0, n)).fill(0);
+  if (n < 4) return T;
+
+  // 基準の平面を O(n) で決める。
+  // ①p[0] からいちばん遠い点 ②その直線からいちばん離れた点、の順に選ぶだけでよい。
+  // （以前は面積最大の三点組を総当たり O(n³) で探していたが、平面が決まれば十分）
+  let ia = 0, bestD = -1;
+  for (let l = 1; l < n; l++) { const t = len2(sub(p[l], p[0])); if (t > bestD) { bestD = t; ia = l; } }
+  const e1 = sub(p[ia], p[0]);
+  if (len2(e1) < 1e-24) return T;                 // 全部同じ点
+  let nBest = V(0, 0, 1), bl2 = 0;
+  for (let l = 0; l < n; l++) {
+    const c = cross(e1, sub(p[l], p[0]));
+    const t = len2(c);
+    if (t > bl2) { bl2 = t; nBest = c; }
+  }
+  if (bl2 < 1e-24) return T;                      // 全部一直線上
+  const bi = 0, n0 = norm(nBest);
+  let flat = 0;
+  for (let l = 0; l < n; l++) flat = Math.max(flat, Math.abs(dot(n0, sub(p[l], p[bi]))));
+
+  const sets = [], keys = [], normals = [];
+  if (flat < 1e-7) {
+    T.coplanar = true;
+    let c = V(0, 0, 0); for (const q of p) c = add(c, q); c = mul(c, 1 / n);
+    const u = anyPerp(n0), w = cross(n0, u);
+    const idx = [...Array(n).keys()];
+    idx.sort((a, b) =>
+      Math.atan2(dot(sub(p[a], c), w), dot(sub(p[a], c), u)) -
+      Math.atan2(dot(sub(p[b], c), w), dot(sub(p[b], c), u)));
+    const S = [];
+    for (const i of idx) {
+      while (S.length >= 2) {
+        const A = p[S[S.length - 2]], B = p[S[S.length - 1]];
+        if (dot(n0, cross(sub(B, A), sub(p[i], A))) > 1e-12) break;
+        S.pop();
+      }
+      S.push(i);
+    }
+    if (S.length < 3) return T;
+    keys.push(S.slice()); sets.push(S); normals.push(n0);
+  } else {
+    // 三点組ごとに配列を作らず、外で一度だけ用意して使い回す
+    const d = new Float64Array(n);
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) for (let k = j + 1; k < n; k++) {
+      const nn = cross(sub(p[j], p[i]), sub(p[k], p[i]));
+      const nl2 = len2(nn);
+      if (nl2 < 1e-24) continue;
+      // 正規化しないまま判定する。d を正規化した値と比べるのは
+      // d² を eps²·|nn|² と比べるのと同じなので、ここでは平方根が要らない。
+      const tol2 = eps * eps * nl2;
+      let pos = 0, neg = 0, mixed = false;
+      for (let l = 0; l < n; l++) {
+        if (l === i || l === j || l === k) { d[l] = 0; continue; }
+        const dl = dot(nn, sub(p[l], p[i]));
+        d[l] = dl;
+        if (dl * dl > tol2) {
+          // 両側に点があると分かった時点で、この三点組は面ではない
+          if (dl > 0) { if (neg) { mixed = true; break; } pos++; }
+          else { if (pos) { mixed = true; break; } neg++; }
+        }
+      }
+      if (mixed || (pos === 0 && neg === 0)) continue;
+      const out = mul(nn, (pos === 0 ? 1 : -1) / Math.sqrt(nl2));
+      const S = [i, j, k];
+      for (let l = 0; l < n; l++) {
+        if (l === i || l === j || l === k) continue;
+        if (d[l] * d[l] <= tol2) S.push(l);
+      }
+      S.sort((a, b) => a - b);
+      const key = S.join(',');
+      if (keys.some(q => q.join(',') === key)) continue;
+      keys.push(S.slice());
+      orderRing(p, S, out);
+      sets.push(S); normals.push(out);
+    }
+  }
+  if (!sets.length) return T;
+
+  for (let q = 0; q < sets.length; q++) {
+    const f = { v: sets[q], n: normals[q], c: V(0, 0, 0), area: 0 };
+    let acc = V(0, 0, 0), cc = V(0, 0, 0);
+    for (let t = 1; t + 1 < f.v.length; t++)
+      acc = add(acc, cross(sub(p[f.v[t]], p[f.v[0]]), sub(p[f.v[t + 1]], p[f.v[0]])));
+    f.area = 0.5 * len(acc);
+    for (const i of f.v) cc = add(cc, p[i]);
+    f.c = mul(cc, 1 / f.v.length);
+    T.faces.push(f);
+  }
+  for (let q = 0; q < T.faces.length; q++) {
+    const r = T.faces[q].v;
+    for (let t = 0; t < r.length; t++) {
+      let a = r[t], b = r[(t + 1) % r.length];
+      if (a > b) { const s = a; a = b; b = s; }
+      let found = -1;
+      for (let e = 0; e < T.edges.length; e++) if (T.edges[e].a === a && T.edges[e].b === b) { found = e; break; }
+      if (found < 0) T.edges.push({ a, b, f0: q, f1: -1, length: len(sub(p[a], p[b])), dihedral: 0 });
+      else if (T.edges[found].f1 < 0) T.edges[found].f1 = q;
+    }
+  }
+  for (const E of T.edges) {
+    E.dihedral = (E.f0 >= 0 && E.f1 >= 0) ? PI - angBetween(T.faces[E.f0].n, T.faces[E.f1].n) : 0;
+    T.deg[E.a]++; T.deg[E.b]++;
+  }
+  let vol = 0, surf = 0;
+  for (const f of T.faces) {
+    surf += f.area;
+    for (let t = 1; t + 1 < f.v.length; t++)
+      vol += det3(p[f.v[0]], p[f.v[t]], p[f.v[t + 1]]) / 6;
+  }
+  T.vol = T.coplanar ? 0 : Math.abs(vol);
+  T.surf = T.coplanar ? T.faces[0].area : surf;
+  for (let i = 0; i < n; i++) if (T.deg[i] > 0) T.vertIdx.push(i);
+  T.ok = true;
+  return T;
+}
+
+// ------------------------------------------------------- 3. 多面体の中心
+function centroidVerts(p, T) {
+  let s = V(0, 0, 0), n = 0;
+  for (const i of T.vertIdx) { s = add(s, p[i]); n++; }
+  return n ? mul(s, 1 / n) : V(0, 0, 0);
+}
+function centroidSurface(p, T) {
+  let s = V(0, 0, 0), w = 0;
+  for (const f of T.faces) for (let t = 1; t + 1 < f.v.length; t++) {
+    const A = p[f.v[0]], B = p[f.v[t]], C = p[f.v[t + 1]];
+    const ar = 0.5 * len(cross(sub(B, A), sub(C, A)));
+    s = add(s, mul(add(add(A, B), C), ar / 3)); w += ar;
+  }
+  return w > 1e-15 ? mul(s, 1 / w) : V(0, 0, 0);
+}
+function centroidVolume(p, T) {
+  const o = centroidVerts(p, T);
+  let s = V(0, 0, 0), w = 0;
+  for (const f of T.faces) for (let t = 1; t + 1 < f.v.length; t++) {
+    const A = sub(p[f.v[0]], o), B = sub(p[f.v[t]], o), C = sub(p[f.v[t + 1]], o);
+    const vv = det3(A, B, C) / 6;
+    s = add(s, mul(add(add(A, B), C), vv / 4)); w += vv;
+  }
+  return Math.abs(w) > 1e-15 ? add(o, mul(s, 1 / w)) : o;
+}
+function circumsphere(p, T) {
+  const vs = T.vertIdx;
+  if (vs.length < 4) return null;
+  const m = vs.length - 1, A = [], b = [], v0 = p[vs[0]];
+  for (let i = 0; i < m; i++) {
+    const vi = p[vs[i + 1]];
+    A.push(2 * (vi.x - v0.x), 2 * (vi.y - v0.y), 2 * (vi.z - v0.z));
+    b.push(len2(vi) - len2(v0));
+  }
+  const x = solveLstsq(A, b, m, 3);
+  if (!x) return null;
+  const O = V(x[0], x[1], x[2]), R = len(sub(p[vs[0]], O));
+  const scale = Math.max(1, R);
+  for (const i of vs) if (Math.abs(len(sub(p[i], O)) - R) > 1e-7 * scale) return null;
+  return { O, R };
+}
+function insphereTangent(p, T) {
+  const m = T.faces.length;
+  if (m < 4) return null;
+  const A = [], b = [];
+  for (const f of T.faces) {
+    A.push(f.n.x, f.n.y, f.n.z, 1);
+    b.push(dot(f.n, p[f.v[0]]));
+  }
+  const x = solveLstsq(A, b, m, 4);
+  if (!x) return null;
+  const O = V(x[0], x[1], x[2]), r = x[3];
+  if (r <= 1e-9) return null;
+  const scale = Math.max(1, r);
+  for (const f of T.faces) {
+    const d = dot(f.n, p[f.v[0]]) - dot(f.n, O);
+    if (Math.abs(d - r) > 1e-7 * scale) return null;
+  }
+  return { O, r };
+}
+function maxInsphere(p, T) {
+  const m = T.faces.length;
+  if (m < 4) return null;
+  const nn = T.faces.map(f => f.n);
+  const dd = T.faces.map(f => dot(f.n, p[f.v[0]]));
+  let bestR = -1, bestO = null;
+  const mm = Math.min(m, 40);
+  for (let i = 0; i < mm; i++) for (let j = i + 1; j < mm; j++)
+    for (let k = j + 1; k < mm; k++) for (let l = k + 1; l < mm; l++) {
+      const f4 = [i, j, k, l], M = [];
+      for (const q of f4) M.push(nn[q].x, nn[q].y, nn[q].z, 1, dd[q]);
+      const x = solveLin(M, 4);
+      if (!x) continue;
+      const c = V(x[0], x[1], x[2]), rr = x[3];
+      if (rr <= 1e-12) continue;
+      let feasible = true;
+      for (let q = 0; q < m; q++) if (dot(nn[q], c) + rr > dd[q] + 1e-9) { feasible = false; break; }
+      if (feasible && rr > bestR) { bestR = rr; bestO = c; }
+    }
+  return bestO ? { O: bestO, r: bestR } : null;
+}
+
+// --------------------------------------------------------- 4. 対象モデル
+const K = {
+  NONE: 'none', POINT: 'point', SEGMENT: 'segment', LINE: 'line', RAY: 'ray',
+  TRIANGLE: 'triangle', PLANE: 'plane', CIRCLE: 'circle', SPHERE: 'sphere',
+  POLY: 'poly', POLYGON: 'polygon', ANGLE: 'angle', NUMBER: 'number'
+};
+const KNAME = {
+  point: '点', segment: '線分', line: '直線', ray: '半直線', triangle: '三角形',
+  plane: '平面', circle: '円', sphere: '球', poly: '多面体', polygon: '多角形',
+  angle: '角', number: '数値', none: '—'
+};
+const OP = {
+  FREE: 'free', ON_OBJ: 'onobj', XYZ: 'xyz', MIDPOINT: 'midpoint', SEGMENT: 'segment',
+  LINE: 'line', RAY: 'ray', TRIANGLE: 'triangle', PLANE3: 'plane3', PLANE_LP: 'planeLP',
+  INTERSECT: 'intersect', ANGLE3: 'angle3', ANGLE_LL: 'angleLL', ANGLE_PP: 'anglePP',
+  BISECTOR: 'bisector', TANGENT_PLANE: 'tangentPlane', PERP_LINE: 'perpLine',
+  PERP_PLANE: 'perpPlane', PARALLEL_LINE: 'parLine', PARALLEL_PLANE: 'parPlane',
+  PERPBIS_PLANE: 'pbPlane', PERPBIS_LINE: 'pbLine', FOOT: 'foot',
+  SPHERE_CR: 'sphCR', SPHERE_CP: 'sphCP', SPHERE4: 'sph4', CIRCLE3: 'circle3',
+  HULL: 'hull', POLY_EDGE: 'polyEdge', POLY_FACE: 'polyFace', POLYGON_PTS: 'polygonPts',
+  CENTROID_V: 'cenV', CENTROID_S: 'cenS', CENTROID_VOL: 'cenVol',
+  CIRCUMSPHERE: 'circum', INSPHERE: 'insph', MAXINSPHERE: 'maxinsph',
+  DISTANCE: 'dist', LENGTH: 'length', AREA: 'area', VOLUME: 'volume',
+  RADIUS: 'radius', NUMBER: 'number', AXIS: 'axis', CENTER: 'center'
+};
+const COL = {
+  point: '#d03050', line: '#1f5fd0', plane: '#2e9e6b', sphere: '#7a5ad0',
+  circle: '#d07a20', poly: '#3d6fe0', angle: '#e08a10', sel: '#00a0b0', num: '#666'
+};
+function defaultColor(k) {
+  if (k === K.POINT) return COL.point;
+  if (k === K.SEGMENT || k === K.LINE || k === K.RAY) return COL.line;
+  if (k === K.TRIANGLE || k === K.PLANE || k === K.POLYGON) return COL.plane;
+  if (k === K.SPHERE) return COL.sphere;
+  if (k === K.CIRCLE) return COL.circle;
+  if (k === K.POLY) return COL.poly;
+  if (k === K.ANGLE) return COL.angle;
+  return COL.num;
+}
+function newObj() {
+  return {
+    id: 0, kind: K.NONE, op: OP.FREE, args: [], variant: 0, idx: [], parent: 0, name: '', def: '',
+    ok: false, a: V(0, 0, 0), b: V(0, 0, 0), c: V(0, 0, 0), r: 0,
+    topo: null, polyPts: [], t0: 0, t1: 0, dir: V(0, 0, 1),
+    visible: true, showLabel: true, builtin: false, color: COL.point, note: ''
+  };
+}
+
+class Doc {
+  constructor() { this.objs = []; this.nextId = 1; this.isectMemo = []; }
+  // objs は必ず id の昇順に並んでいる（add は昇順に積み、remove も順序を保つ）。
+  // 参照は評価のたびに何度も起きるので、総なめではなく二分探索で引く。
+  get(id) {
+    let lo = 0, hi = this.objs.length;
+    while (lo < hi) { const md = (lo + hi) >> 1; if (this.objs[md].id < id) lo = md + 1; else hi = md; }
+    return (lo < this.objs.length && this.objs[lo].id === id) ? this.objs[lo] : null;
+  }
+  byName(n) { return this.objs.find(o => o.name === n) || null; }
+  nameUsed(n) { return this.objs.some(o => o.name === n); }
+  autoName(kind) {
+    // 候補ごとに全対象を見に行くと名前 1 つに何百回も走査することになるので、
+    // 使用中の名前は一度だけ集めておく。
+    const used = new Set();
+    for (const o of this.objs) if (o.name) used.add(o.name);
+    const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', a = 'abcdefghijklmnopqrstuvwxyz';
+    const letters = kind === K.POINT ? A
+      : (kind === K.SEGMENT || kind === K.LINE || kind === K.RAY) ? a : '';
+    for (let s = 0; s < 30 && letters; s++) for (const ch of letters) {
+      const n = ch + (s ? s : ''); if (!used.has(n)) return n;
+    }
+    const pre = { plane: 'p', circle: 'c', sphere: 's', poly: 'h', polygon: 'f',
+                  angle: 'w', number: 'n', triangle: 't' }[kind] || 'x';
+    for (let i = 1; i < 999; i++) { const n = pre + i; if (!used.has(n)) return n; }
+    return '?';
+  }
+  add(o) { o.id = this.nextId++; this.objs.push(o); return o.id; }
+  // 座標軸。作れる対象と同じ仕組みに乗せてあるので、
+  // 「上の点」「平行線」「垂線」「交わり」「角」…がそのまま使える。
+  addAxes() {
+    ['x軸', 'y軸', 'z軸'].forEach((nm, i) => {
+      const o = newObj();
+      o.op = OP.AXIS; o.variant = i; o.builtin = true;
+      o.name = nm; o.def = nm;
+      o.showLabel = false;                  // 色で分かるので札は出さない
+      this.add(o);
+    });
+    this.recompute();
+  }
+  remove(id) {
+    const z = this.get(id);
+    if (z && z.builtin) return;             // 座標軸は消せない
+    const dead = new Set([id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const o of this.objs) {
+        if (dead.has(o.id)) continue;
+        if (o.args.some(a => dead.has(a))) { dead.add(o.id); grew = true; }
+      }
+    }
+    this.objs = this.objs.filter(o => !dead.has(o.id));
+  }
+  clear() { this.objs = []; this.nextId = 1; this.isectMemo = []; }
+  // 交わりの点は「1 つめ」「2 つめ」… と対象ごとに作るが、答えの並びはどれも同じ。
+  // 1 回の recompute のあいだだけ (A,B) ごとの答えを取っておき、同じ計算の繰り返しを避ける。
+  isectPoints(X, Y) {
+    for (const m of this.isectMemo) if (m.a === X.id && m.b === Y.id) return m.pts;
+    const pts = intersectPoints(X, Y);
+    this.isectMemo.push({ a: X.id, b: Y.id, pts });
+    return pts;
+  }
+  recompute() {
+    this.isectMemo = [];                    // 前回の答えは持ち越さない
+    for (const o of this.objs) evalObj(this, o);
+    for (const o of this.objs) if (!o.name) o.name = this.autoName(o.kind);
+  }
+}
+
+// 点列から多角形（面）を組み立てる。checkFlat のときは同一平面でなければ断る。
+// 「n 点がなす面」と「多面体の面」で同じ手順を使い回す。
+function makePolygon(o, P, checkFlat) {
+  if (P.length < 3) { o.note = '3 点以上が必要です'; return false; }
+  let n = V(0, 0, 0), best = 0;
+  for (let i = 1; i + 1 < P.length; i++) {
+    const c = cross(sub(P[i], P[0]), sub(P[i + 1], P[0]));
+    const t = len2(c);
+    if (t > best) { best = t; n = c; }
+  }
+  if (best < 1e-24) { o.note = 'すべての点が一直線上にあります'; return false; }
+  n = norm(n);
+  if (checkFlat) {
+    let scale = 1;
+    for (const q of P) scale = Math.max(scale, len(sub(q, P[0])));
+    for (const q of P)
+      if (Math.abs(dot(n, sub(q, P[0]))) > 1e-7 * scale) { o.note = '同一平面上にありません'; return false; }
+  }
+  let cc = V(0, 0, 0), acc = V(0, 0, 0);
+  for (const q of P) cc = add(cc, q);
+  for (let t = 1; t + 1 < P.length; t++) acc = add(acc, cross(sub(P[t], P[0]), sub(P[t + 1], P[0])));
+  o.kind = K.POLYGON; o.polyPts = P; o.b = n;
+  o.c = mul(cc, 1 / P.length);
+  o.r = 0.5 * len(acc);                        // 多角形では r に面積を入れておく
+  o.ok = true;
+  return true;
+}
+const isLineLike = k => k === K.SEGMENT || k === K.LINE || k === K.RAY;
+const isPlaneLike = k => k === K.PLANE || k === K.TRIANGLE || k === K.POLYGON;
+// 平面上の点 X が多角形 P（法線 n）の内部（辺上も含む）にあるか
+// 閉じた頂点列（法線 n）の内側に X があるか。辺の上も内側とみなす。
+// 頂点の取り出し方だけを差し替えて、多角形にも多面体の面にも同じ判定を使う。
+function pointInLoop(m, get, n, X) {
+  for (let i = 0; i < m; i++) {
+    const a = get(i), b = get((i + 1) % m);
+    const tol = 1e-9 * Math.max(1, len(sub(b, a)) * Math.max(1, len(sub(X, a))));
+    if (dot(n, cross(sub(b, a), sub(X, a))) < -tol) return false;
+  }
+  return true;
+}
+function pointInPolygon(P, n, X) { return pointInLoop(P.length, i => P[i], n, X); }
+function objLineLike(o) {
+  if (!o || !o.ok || !isLineLike(o.kind)) return null;
+  const d = sub(o.b, o.a);
+  return len2(d) > 1e-24 ? { p: o.a, d } : null;
+}
+// 「面」として使える対象だけを平面として返す。
+// objPlane は円も受け付けるが、垂線・垂足・距離・平面どうしの交わりでは
+// 円を平面として扱ってほしくないので、こちらを使う。
+function objFacePlane(o) {
+  if (!o || (o.kind !== K.PLANE && o.kind !== K.TRIANGLE && o.kind !== K.POLYGON)) return null;
+  return objPlane(o);
+}
+function objPlane(o) {
+  if (!o || !o.ok) return null;
+  if (o.kind === K.PLANE) return { p: o.a, n: o.b };
+  if (o.kind === K.TRIANGLE) return { p: o.a, n: norm(cross(sub(o.b, o.a), sub(o.c, o.a))) };
+  if (o.kind === K.POLYGON && o.polyPts.length >= 3) return { p: o.polyPts[0], n: o.b };
+  if (o.kind === K.CIRCLE) return { p: o.a, n: o.b };
+  return null;
+}
+const footOnLine = (P, A, d) => add(A, mul(d, dot(sub(P, A), d) / Math.max(1e-300, len2(d))));
+const footOnPlane = (P, A, n) => sub(P, mul(n, dot(sub(P, A), n) / Math.max(1e-300, len2(n))));
+const distPointLine = (P, A, d) => len(cross(sub(P, A), d)) / Math.max(1e-300, len(d));
+
+// 対象上に束縛された点
+function pointOnEval(host, self) {
+  if (!host.ok) return null;
+  switch (host.kind) {
+    case K.SEGMENT: return add(host.a, mul(sub(host.b, host.a), clampd(self.t0, 0, 1)));
+    case K.RAY: return add(host.a, mul(sub(host.b, host.a), Math.max(0, self.t0)));
+    case K.LINE: return add(host.a, mul(sub(host.b, host.a), self.t0));
+    case K.CIRCLE: {
+      const u = anyPerp(host.b), w = cross(host.b, u);
+      return add(host.a, mul(add(mul(u, Math.cos(self.t0)), mul(w, Math.sin(self.t0))), host.r));
+    }
+    case K.SPHERE: return add(host.a, mul(norm(self.dir), host.r));
+    case K.PLANE: { const u = anyPerp(host.b), w = cross(host.b, u); return add(add(host.a, mul(u, self.t0)), mul(w, self.t1)); }
+    case K.TRIANGLE: {
+      const n = norm(cross(sub(host.b, host.a), sub(host.c, host.a)));
+      const u = anyPerp(n), w = cross(n, u);
+      return add(add(host.a, mul(u, self.t0)), mul(w, self.t1));
+    }
+    case K.POLYGON: {
+      const u = anyPerp(host.b), w = cross(host.b, u);
+      return add(add(host.polyPts[0], mul(u, self.t0)), mul(w, self.t1));
+    }
+  }
+  return null;
+}
+function pointOnSetFrom(host, self, P) {
+  switch (host.kind) {
+    case K.SEGMENT: case K.RAY: case K.LINE: {
+      const d = sub(host.b, host.a);
+      let t = dot(sub(P, host.a), d) / Math.max(1e-300, len2(d));
+      if (host.kind === K.SEGMENT) t = clampd(t, 0, 1);
+      if (host.kind === K.RAY) t = Math.max(0, t);
+      self.t0 = t; break;
+    }
+    case K.CIRCLE: {
+      const u = anyPerp(host.b), w = cross(host.b, u), q = sub(P, host.a);
+      self.t0 = Math.atan2(dot(q, w), dot(q, u)); break;
+    }
+    case K.SPHERE: self.dir = norm(sub(P, host.a)); break;
+    case K.PLANE: {
+      const u = anyPerp(host.b), w = cross(host.b, u), q = sub(P, host.a);
+      self.t0 = dot(q, u); self.t1 = dot(q, w); break;
+    }
+    case K.TRIANGLE: {
+      const n = norm(cross(sub(host.b, host.a), sub(host.c, host.a)));
+      const u = anyPerp(n), w = cross(n, u), q = sub(P, host.a);
+      self.t0 = dot(q, u); self.t1 = dot(q, w); break;
+    }
+    case K.POLYGON: {
+      const u = anyPerp(host.b), w = cross(host.b, u), q = sub(P, host.polyPts[0]);
+      self.t0 = dot(q, u); self.t1 = dot(q, w); break;
+    }
+  }
+}
+
+// ------------------------------------------------------------ 5. 交わり
+function addUniquePoint(v, p, eps) {
+  for (const q of v) if (len(sub(q, p)) <= eps) return;
+  v.push(p);
+}
+// A0 + Cu cosθ + Cw sinθ = 0
+function solveTrig(A0, Cu, Cw) {
+  const R = Math.hypot(Cu, Cw);
+  if (R < 1e-14) return [];
+  let s = -A0 / R;
+  if (s > 1 + 1e-12 || s < -1 - 1e-12) return [];
+  s = clampd(s, -1, 1);
+  const phi = Math.atan2(Cu, Cw), a = Math.asin(s);
+  const t0 = a - phi, t1 = PI - a - phi;
+  let diff = Math.abs(t0 - t1) % (2 * PI);
+  return (diff < 1e-9 || Math.abs(diff - 2 * PI) < 1e-9) ? [t0] : [t0, t1];
+}
+function pointInFace(pts, f, X) {
+  return pointInLoop(f.v.length, i => pts[f.v[i]], f.n, X);
+}
+// 線分 ab のうち、点 c にいちばん近い所（t は 0〜1 に丸めたパラメータ）
+function nearestOnSeg(a, b, c) {
+  const ab = sub(b, a), L2 = len2(ab);
+  const t = L2 > 0 ? clampd(dot(sub(c, a), ab) / L2, 0, 1) : 0;
+  return { p: add(a, mul(ab, t)), t };
+}
+function intersectPoints(A, B) {
+  const out = [];
+  if (!A || !B || !A.ok || !B.ok) return out;
+  let L = null, O = null, ll = objLineLike(A);
+  if (ll) { L = A; O = B; } else { const l2 = objLineLike(B); if (l2) { L = B; O = A; ll = l2; } }
+
+  if (L) {
+    const lp = ll.p, ld = ll.d, dl = len(ld), eps = 1e-9 * Math.max(1, dl);
+    const inRange = t => L.kind === K.SEGMENT ? (t >= -1e-9 && t <= 1 + 1e-9)
+      : (L.kind === K.RAY ? t >= -1e-9 : true);
+    const ts = [];
+    const addT = t => { if (inRange(t)) ts.push(t); };
+
+    if (O.kind === K.SPHERE) {
+      const f = sub(lp, O.a);
+      const aq = len2(ld), bq = 2 * dot(f, ld), cq = len2(f) - O.r * O.r;
+      const disc = bq * bq - 4 * aq * cq;
+      if (disc >= -1e-12) {
+        const sq = Math.sqrt(Math.max(0, disc));
+        addT((-bq - sq) / (2 * aq)); addT((-bq + sq) / (2 * aq));
+      }
+    } else if (O.kind === K.PLANE || O.kind === K.TRIANGLE || O.kind === K.POLYGON) {
+      const pl = objPlane(O), den = dot(pl.n, ld);
+      if (Math.abs(den) > 1e-12 * Math.max(1, dl)) {
+        const t = dot(pl.n, sub(pl.p, lp)) / den;
+        // 多角形（多面体の面）は、その内部に当たったときだけ交点とする
+        if (O.kind !== K.POLYGON || pointInPolygon(O.polyPts, O.b, add(lp, mul(ld, t)))) addT(t);
+      }
+    } else if (O.kind === K.CIRCLE) {
+      if (Math.abs(dot(O.b, ld)) > 1e-9 * dl) {
+        const t = dot(O.b, sub(O.a, lp)) / dot(O.b, ld);
+        const X = add(lp, mul(ld, t));
+        if (Math.abs(len(sub(X, O.a)) - O.r) <= 1e-7 * Math.max(1, O.r)) addT(t);
+      } else if (Math.abs(dot(O.b, sub(lp, O.a))) <= 1e-9 * Math.max(1, O.r)) {
+        const f = sub(lp, O.a);
+        const aq = len2(ld), bq = 2 * dot(f, ld), cq = len2(f) - O.r * O.r;
+        const disc = bq * bq - 4 * aq * cq;
+        if (disc >= 0) {
+          const sq = Math.sqrt(disc);
+          addT((-bq - sq) / (2 * aq)); addT((-bq + sq) / (2 * aq));
+        }
+      }
+    } else if (O.kind === K.POLY) {
+      for (const f of O.topo.faces) {
+        const den = dot(f.n, ld);
+        if (Math.abs(den) < 1e-12 * Math.max(1, dl)) continue;
+        const t = dot(f.n, sub(O.polyPts[f.v[0]], lp)) / den;
+        if (!inRange(t)) continue;
+        const X = add(lp, mul(ld, t));
+        if (pointInFace(O.polyPts, f, X)) ts.push(t);
+      }
+    } else {
+      const l2 = objLineLike(O);
+      if (l2) {
+        const w0 = sub(lp, l2.p);
+        const aa = dot(ld, ld), bb = dot(ld, l2.d), cc = dot(l2.d, l2.d);
+        const dd = dot(ld, w0), ee = dot(l2.d, w0);
+        const den = aa * cc - bb * bb;
+        if (Math.abs(den) > 1e-14) {
+          const s = (bb * ee - cc * dd) / den, t = (aa * ee - bb * dd) / den;
+          const P = add(lp, mul(ld, s)), Q = add(l2.p, mul(l2.d, t));
+          const scale = Math.max(1, Math.max(len(P), len(Q)));
+          const okR = inRange(s) && (O.kind === K.SEGMENT ? (t >= -1e-9 && t <= 1 + 1e-9)
+            : (O.kind === K.RAY ? t >= -1e-9 : true));
+          if (okR && len(sub(P, Q)) <= 1e-7 * scale) ts.push(s);
+        }
+      }
+    }
+    ts.sort((x, y) => x - y);
+    for (const t of ts) addUniquePoint(out, add(lp, mul(ld, t)), eps);
+    return out;
+  }
+
+  let C = null;
+  if (A.kind === K.CIRCLE) { C = A; O = B; } else if (B.kind === K.CIRCLE) { C = B; O = A; }
+  if (C) {
+    const u = anyPerp(C.b), w = cross(C.b, u), r = C.r, eps = 1e-9 * Math.max(1, r);
+    const at = t => add(C.a, mul(add(mul(u, Math.cos(t)), mul(w, Math.sin(t))), r));
+    const onPlane = (q, n) => solveTrig(dot(n, sub(C.a, q)), r * dot(n, u), r * dot(n, w));
+    let thetas = [];
+    if (O.kind === K.PLANE) {
+      const pl = objPlane(O); thetas = onPlane(pl.p, pl.n);
+    } else if (O.kind === K.POLYGON) {
+      for (const th of onPlane(O.polyPts[0], O.b)) {
+        const X = at(th);
+        if (pointInPolygon(O.polyPts, O.b, X)) thetas.push(th);
+      }
+    } else if (O.kind === K.TRIANGLE) {
+      const pl = objPlane(O);
+      for (const th of onPlane(pl.p, pl.n)) {
+        const X = at(th);
+        const v0 = sub(O.b, O.a), v1 = sub(O.c, O.a), v2 = sub(X, O.a);
+        const d00 = dot(v0, v0), d01 = dot(v0, v1), d11 = dot(v1, v1);
+        const d20 = dot(v2, v0), d21 = dot(v2, v1);
+        const den = d00 * d11 - d01 * d01;
+        if (Math.abs(den) < 1e-18) continue;
+        const a1 = (d11 * d20 - d01 * d21) / den, b1 = (d00 * d21 - d01 * d20) / den;
+        if (a1 >= -1e-9 && b1 >= -1e-9 && a1 + b1 <= 1 + 1e-9) thetas.push(th);
+      }
+    } else if (O.kind === K.SPHERE) {
+      const e = sub(C.a, O.a);
+      thetas = solveTrig(len2(e) + r * r - O.r * O.r, 2 * r * dot(e, u), 2 * r * dot(e, w));
+    } else if (O.kind === K.CIRCLE) {
+      let cand;
+      if (len(cross(C.b, O.b)) < 1e-9 && Math.abs(dot(O.b, sub(C.a, O.a))) < 1e-9 * Math.max(1, r)) {
+        const e = sub(C.a, O.a);
+        cand = solveTrig(len2(e) + r * r - O.r * O.r, 2 * r * dot(e, u), 2 * r * dot(e, w));
+      } else cand = onPlane(O.a, O.b);
+      for (const th of cand) {
+        const X = at(th);
+        if (Math.abs(len(sub(X, O.a)) - O.r) <= 1e-7 * Math.max(1, O.r)) thetas.push(th);
+      }
+    } else if (O.kind === K.POLY) {
+      for (const f of O.topo.faces)
+        for (const th of onPlane(O.polyPts[f.v[0]], f.n)) {
+          const X = at(th);
+          if (pointInFace(O.polyPts, f, X)) thetas.push(th);
+        }
+    }
+    thetas = thetas.map(t => { let x = t % (2 * PI); if (x < 0) x += 2 * PI; return x; });
+    thetas.sort((x, y) => x - y);
+    for (const t of thetas) addUniquePoint(out, at(t), eps);
+    return out;
+  }
+
+  // ---- 多面体 x 球 --------------------------------------------------------
+  // 多面体の表面と球の交わりは、ふつうは面の上の円弧（曲線）になる。
+  // 有限個の点になるのは、どの面も「切られず、接するだけ」のとき。
+  // 内接球・最大内接球・傍接球がこれにあたり、接している面ごとに接点が 1 つ出る。
+  let H = null;
+  if (A.kind === K.POLY && B.kind === K.SPHERE) { H = A; O = B; }
+  else if (B.kind === K.POLY && A.kind === K.SPHERE) { H = B; O = A; }
+  if (H) {
+    const c = O.a, R = O.r;
+    const scale = Math.max(1, R, len(c));
+    // 手で打った座標の丸め（小数 7 桁など）でも「球面上」と見なせる程度にとる
+    const tol = 1e-6 * scale, eps = 1e-7 * scale;
+
+    // 面をきちんと貫いているものが 1 つでもあれば、交わりは弧（曲線）になる。
+    // 「面の中に球の内側の所と外側の所が両方ある」かどうかで判定する。
+    // 貫いていないなら、表面のうち中心からちょうど R の所は
+    // 「頂点」「辺に接する点」「面に接する点」のどれかしかないので、同じ一巡で拾っておく。
+    const hits = [];
+    const want = X => { if (Math.abs(len(sub(X, c)) - R) <= tol) hits.push(X); };
+    for (const f of H.topo.faces) {
+      const m = f.v.length;
+      const F = sub(c, mul(f.n, dot(f.n, sub(c, H.polyPts[f.v[0]]))));   // 面の平面に下ろした足
+      let dmax = 0;
+      for (let i = 0; i < m; i++) dmax = Math.max(dmax, len(sub(H.polyPts[f.v[i]], c)));
+      let dmin;
+      if (pointInFace(H.polyPts, f, F)) { dmin = len(sub(F, c)); want(F); }   // 内接球はここ
+      else {
+        dmin = Infinity;
+        for (let i = 0; i < m; i++)
+          dmin = Math.min(dmin, len(sub(nearestOnSeg(
+            H.polyPts[f.v[i]], H.polyPts[f.v[(i + 1) % m]], c).p, c)));
+      }
+      if (dmin < R - tol && dmax > R + tol) { out.length = 0; out.curved = true; return out; }
+    }
+    for (const i of H.topo.vertIdx) want(H.polyPts[i]);          // 頂点（外接球はここ）
+    for (const e of H.topo.edges) {                              // 辺に接する点
+      const q = nearestOnSeg(H.polyPts[e.a], H.polyPts[e.b], c);
+      if (q.t > 1e-9 && q.t < 1 - 1e-9) want(q.p);
+    }
+    for (const p of hits) addUniquePoint(out, p, eps);
+  }
+  return out;
+}
+// 曲線（直線・円）になる交わりだけを解く。点になる組み合わせでは null を返す。
+// 点の側は intersectPoints が受け持つので、両者を混ぜずに分けておく。
+function intersectCurve(A, B) {
+  const EPS = 1e-9;
+  const la = objLineLike(A), lb = objLineLike(B);
+  const pa = !la ? objFacePlane(A) : null, pb = !lb ? objFacePlane(B) : null;
+  const aPlane = !!pa, bPlane = !!pb;
+
+  if (aPlane && bPlane) {
+    const d = cross(pa.n, pb.n);
+    if (len(d) < EPS) return null;
+    // 2 平面 n1·x = h1, n2·x = h2 の交線。方向は d = n1×n2、通る点は下の式。
+    // （cross の向きを取り違えると、点だけが原点対称にずれた別の直線になる）
+    const h1 = dot(pa.n, pa.p), h2 = dot(pb.n, pb.p);
+    const base = mul(add(mul(cross(pb.n, d), h1), mul(cross(d, pa.n), h2)), 1 / len2(d));
+    return { kind: K.LINE, a: base, b: add(base, norm(d)), r: 0 };
+  }
+  const planeSphere = (Q, N, S) => {
+    N = norm(N);
+    const h = dot(N, sub(S.a, Q));
+    if (Math.abs(h) > S.r) return null;
+    return { kind: K.CIRCLE, a: sub(S.a, mul(N, h)), b: N, r: Math.sqrt(Math.max(0, S.r * S.r - h * h)) };
+  };
+  if (aPlane && B.kind === K.SPHERE) return planeSphere(pa.p, pa.n, B);
+  if (bPlane && A.kind === K.SPHERE) return planeSphere(pb.p, pb.n, A);
+  if (A.kind === K.SPHERE && B.kind === K.SPHERE) {
+    const d = sub(B.a, A.a), Ld = len(d);
+    if (Ld < EPS || Ld > A.r + B.r || Ld < Math.abs(A.r - B.r)) return null;
+    const x = (Ld * Ld + A.r * A.r - B.r * B.r) / (2 * Ld);
+    const rr = A.r * A.r - x * x;
+    if (rr < 0) return null;
+    const nb = mul(d, 1 / Ld);
+    return { kind: K.CIRCLE, a: add(A.a, mul(nb, x)), b: nb, r: Math.sqrt(rr) };
+  }
+  return null;
+}
+// 曲線と点の両方をまとめて扱いたいとき用（道具の下調べなど）
+function intersectObjs(A, B, variant) {
+  const c = intersectCurve(A, B);
+  if (c) return c;
+  const pts = intersectPoints(A, B);
+  if (variant < 0 || variant >= pts.length) return null;
+  return { kind: K.POINT, a: pts[variant], b: V(0, 0, 0), r: 0 };
+}
+
+// ------------------------------------------------------------ 6. 評価
+// 無限大や NaN を持ち込まないための見張り。
+// これらを描画やあたり判定に流すと、画素の範囲計算が壊れて何が起きるか分からない。
+function finiteV(p) { return isFinite(p.x) && isFinite(p.y) && isFinite(p.z); }
+function finiteObj(o) {
+  if (!finiteV(o.a) || !finiteV(o.b) || !finiteV(o.c) || !isFinite(o.r)) return false;
+  for (const p of o.polyPts) if (!finiteV(p)) return false;
+  return true;
+}
+function evalObj(D, o) {
+  o.ok = false; o.note = '';
+  const A = k => (k < o.args.length) ? D.get(o.args[k]) : null;
+  const pts = n => {
+    const r = [];
+    for (let i = 0; i < n; i++) {
+      const q = A(i);
+      if (!q || !q.ok || q.kind !== K.POINT) return null;
+      r.push(q.a);
+    }
+    return r;
+  };
+  switch (o.op) {
+    case OP.FREE: case OP.XYZ: o.kind = K.POINT; o.ok = true; break;
+    case OP.CENTER: {                              // 円・球の中心を点として取り出す
+      const x = A(0);
+      if (!x || !x.ok || (x.kind !== K.CIRCLE && x.kind !== K.SPHERE)) break;
+      o.kind = K.POINT; o.a = x.a; o.ok = true; break;
+    }
+    case OP.AXIS: {
+      const k = (o.variant < 0 || o.variant > 2) ? 0 : o.variant;
+      o.kind = K.LINE; o.a = V(0, 0, 0);
+      o.b = V(k === 0 ? 1 : 0, k === 1 ? 1 : 0, k === 2 ? 1 : 0);
+      o.ok = true; break;
+    }
+    case OP.ON_OBJ: {
+      const h = A(0); if (!h) break;
+      const p = pointOnEval(h, o); if (!p) break;
+      o.kind = K.POINT; o.a = p; o.ok = true; break;
+    }
+    case OP.MIDPOINT: {
+      if (o.args.length === 1) {
+        const s = A(0);
+        if (!s || !s.ok || s.kind !== K.SEGMENT) break;
+        o.kind = K.POINT; o.a = mul(add(s.a, s.b), 0.5); o.ok = true; break;
+      }
+      const p = pts(2); if (!p) break;
+      o.kind = K.POINT; o.a = mul(add(p[0], p[1]), 0.5); o.ok = true; break;
+    }
+    case OP.SEGMENT: case OP.LINE: case OP.RAY: {
+      const p = pts(2); if (!p) break;
+      if (len(sub(p[1], p[0])) < 1e-12) break;
+      o.kind = o.op === OP.SEGMENT ? K.SEGMENT : (o.op === OP.LINE ? K.LINE : K.RAY);
+      o.a = p[0]; o.b = p[1]; o.ok = true; break;
+    }
+    case OP.TRIANGLE: {
+      const p = pts(3); if (!p) break;
+      if (len(cross(sub(p[1], p[0]), sub(p[2], p[0]))) < 1e-12) { o.note = '3 点が一直線上にあります'; break; }
+      o.kind = K.TRIANGLE; o.a = p[0]; o.b = p[1]; o.c = p[2]; o.ok = true; break;
+    }
+    case OP.PLANE3: {
+      const p = pts(3); if (!p) break;
+      const n = cross(sub(p[1], p[0]), sub(p[2], p[0]));
+      if (len(n) < 1e-12) { o.note = '3 点が一直線上にあります'; break; }
+      o.kind = K.PLANE; o.a = p[0]; o.b = norm(n); o.ok = true; break;
+    }
+    case OP.PLANE_LP: {
+      const x = A(0), y = A(1);
+      if (!x || !y || !x.ok || !y.ok) break;
+      let base, dir, q;
+      const lx = objLineLike(x), ly = objLineLike(y);
+      if (lx && y.kind === K.POINT) { base = lx.p; dir = lx.d; q = y.a; }
+      else if (ly && x.kind === K.POINT) { base = ly.p; dir = ly.d; q = x.a; }
+      else break;
+      const v = sub(q, base), n = cross(dir, v);
+      if (len(n) <= 1e-12 * Math.max(1, len(dir) * len(v))) { o.note = '点が直線上にあるため平面が定まりません'; break; }
+      o.kind = K.PLANE; o.a = base; o.b = norm(n); o.ok = true; break;
+    }
+    case OP.INTERSECT: {
+      const x = A(0), y = A(1);
+      if (!x || !y || !x.ok || !y.ok) break;
+      let vv = o.variant;
+      if (o.args.length >= 3) { const nn = A(2); if (nn && nn.ok && nn.kind === K.NUMBER) vv = indexFromNumber(nn.r); }
+      const t = intersectCurve(x, y);                 // 直線や円になる場合
+      if (t) { o.kind = t.kind; o.a = t.a; o.b = t.b; o.r = t.r; o.ok = true; break; }
+      const pp = D.isectPoints(x, y);
+      if (vv >= 0 && vv < pp.length) { o.kind = K.POINT; o.a = pp[vv]; o.ok = true; break; }
+      o.note = pp.curved ? '交わりが面の上の円弧になるため、点としては作れません'
+        : (pp.length ? '交点は ' + pp.length + ' 個しかありません' : '交わりません');
+      break;
+    }
+    case OP.ANGLE3: {
+      const p = pts(3); if (!p) break;
+      const u = sub(p[0], p[1]), w = sub(p[2], p[1]);
+      if (len(u) < 1e-12 || len(w) < 1e-12) break;
+      o.kind = K.ANGLE; o.a = p[1]; o.b = norm(u); o.c = norm(w);
+      o.r = Math.atan2(len(cross(u, w)), dot(u, w)); o.ok = true; break;
+    }
+    case OP.ANGLE_LL: {
+      const x = A(0), y = A(1);
+      const lx = objLineLike(x), ly = objLineLike(y);
+      if (!lx || !ly) break;
+      let vtx = lx.p;
+      const ip = intersectObjs(x, y, 0);
+      if (ip && ip.kind === K.POINT) vtx = ip.a;
+      let th = angBetween(lx.d, ly.d), d2 = ly.d;
+      if (th > PI / 2) { th = PI - th; d2 = neg(d2); }
+      o.kind = K.ANGLE; o.a = vtx; o.b = norm(lx.d); o.c = norm(d2); o.r = th; o.ok = true; break;
+    }
+    case OP.ANGLE_PP: {
+      const x = A(0), y = A(1);
+      const px = objPlane(x), py = objPlane(y);
+      if (!px || !py) break;
+      const d = cross(px.n, py.n);
+      o.kind = K.ANGLE; o.r = Math.acos(clampd(Math.abs(dot(norm(px.n), norm(py.n))), -1, 1)); o.ok = true;
+      if (len(d) > 1e-9) {
+        const ln = intersectObjs(x, y, 0);
+        if (ln && ln.kind === K.LINE) {
+          o.a = ln.a;
+          const e = norm(sub(ln.b, ln.a));
+          o.b = norm(cross(px.n, e)); o.c = norm(cross(py.n, e));
+          if (dot(o.b, o.c) < 0) o.c = neg(o.c);
+        }
+      } else o.note = '2 平面は平行です';
+      break;
+    }
+    case OP.BISECTOR: {
+      const p = pts(3); if (!p) break;
+      const u = sub(p[0], p[1]), w = sub(p[2], p[1]);
+      if (len(u) < 1e-12 || len(w) < 1e-12) break;
+      const d = add(norm(u), norm(w));
+      if (len(d) < 1e-9) { o.note = '角が 180° なので二等分線が定まりません'; break; }
+      o.kind = K.RAY; o.a = p[1]; o.b = add(p[1], norm(d)); o.ok = true; break;
+    }
+    case OP.TANGENT_PLANE: {
+      const s = A(0), q = A(1);
+      if (!s || !q || !s.ok || !q.ok || s.kind !== K.SPHERE || q.kind !== K.POINT) break;
+      const n = sub(q.a, s.a);
+      if (Math.abs(len(n) - s.r) > 1e-6 * Math.max(1, s.r)) { o.note = '点が球面上にありません'; break; }
+      o.kind = K.PLANE; o.a = q.a; o.b = norm(n); o.ok = true; break;
+    }
+    case OP.PERP_LINE: {
+      const q = A(0), t = A(1);
+      if (!q || !t || !q.ok || !t.ok || q.kind !== K.POINT) break;
+      const pl = objFacePlane(t);
+      if (pl) { o.kind = K.LINE; o.a = q.a; o.b = add(q.a, norm(pl.n)); o.ok = true; break; }
+      const ln = objLineLike(t);
+      if (ln) {
+        const f = footOnLine(q.a, ln.p, ln.d);
+        if (len(sub(f, q.a)) < 1e-9) { o.note = '点が直線上にあるため垂線は一意に定まりません（垂直平面をお使いください）'; break; }
+        o.kind = K.LINE; o.a = q.a; o.b = f; o.ok = true;
+      }
+      break;
+    }
+    case OP.PERP_PLANE: {
+      const q = A(0), t = A(1), ln = objLineLike(t);
+      if (!q || !q.ok || q.kind !== K.POINT || !ln) break;
+      o.kind = K.PLANE; o.a = q.a; o.b = norm(ln.d); o.ok = true; break;
+    }
+    case OP.PARALLEL_LINE: {
+      const q = A(0), t = A(1), ln = objLineLike(t);
+      if (!q || !q.ok || q.kind !== K.POINT || !ln) break;
+      o.kind = K.LINE; o.a = q.a; o.b = add(q.a, norm(ln.d)); o.ok = true; break;
+    }
+    case OP.PARALLEL_PLANE: {
+      const q = A(0), t = A(1), pl = objPlane(t);
+      if (!q || !q.ok || q.kind !== K.POINT || !pl) break;
+      o.kind = K.PLANE; o.a = q.a; o.b = norm(pl.n); o.ok = true; break;
+    }
+    case OP.PERPBIS_PLANE: {
+      let p;
+      if (o.args.length === 1) {
+        const s = A(0);
+        if (!s || !s.ok || s.kind !== K.SEGMENT) break;
+        p = [s.a, s.b];
+      } else { p = pts(2); if (!p) break; }
+      const d = sub(p[1], p[0]);
+      if (len(d) < 1e-12) break;
+      o.kind = K.PLANE; o.a = mul(add(p[0], p[1]), 0.5); o.b = norm(d); o.ok = true; break;
+    }
+    case OP.PERPBIS_LINE: {
+      let p, pl;
+      if (o.args.length === 2) {
+        const s = A(0);
+        if (!s || !s.ok || s.kind !== K.SEGMENT) break;
+        p = [s.a, s.b]; pl = objPlane(A(1));
+      } else { p = pts(2); if (!p) break; pl = objPlane(A(2)); }
+      if (!pl) break;
+      const d = sub(p[1], p[0]);
+      if (len(d) < 1e-12) break;
+      const mid = mul(add(p[0], p[1]), 0.5);
+      const dir = cross(pl.n, norm(d));
+      if (len(dir) < 1e-9) { o.note = '線分が平面に垂直なため定まりません'; break; }
+      const base = footOnPlane(mid, pl.p, pl.n);
+      o.kind = K.LINE; o.a = base; o.b = add(base, norm(dir)); o.ok = true; break;
+    }
+    case OP.FOOT: {
+      const q = A(0), t = A(1);
+      if (!q || !t || !q.ok || q.kind !== K.POINT) break;
+      const pl = objFacePlane(t);
+      if (pl) { o.kind = K.POINT; o.a = footOnPlane(q.a, pl.p, pl.n); o.ok = true; break; }
+      const ln = objLineLike(t);
+      if (ln) { o.kind = K.POINT; o.a = footOnLine(q.a, ln.p, ln.d); o.ok = true; }
+      break;
+    }
+    case OP.SPHERE_CR: {
+      const q = A(0), nu = A(1);
+      if (!q || !q.ok || q.kind !== K.POINT) break;
+      const rad = (nu && nu.ok && nu.kind === K.NUMBER) ? nu.r : o.r;
+      if (rad <= 1e-12) break;
+      o.kind = K.SPHERE; o.a = q.a; o.r = rad; o.ok = true; break;
+    }
+    case OP.SPHERE_CP: {
+      const p = pts(2); if (!p) break;
+      const rad = len(sub(p[1], p[0]));
+      if (rad < 1e-12) break;
+      o.kind = K.SPHERE; o.a = p[0]; o.r = rad; o.ok = true; break;
+    }
+    case OP.SPHERE4: {
+      const p = pts(4); if (!p) break;
+      const M = [];
+      for (let i = 0; i < 3; i++)
+        M.push(2 * (p[i + 1].x - p[0].x), 2 * (p[i + 1].y - p[0].y), 2 * (p[i + 1].z - p[0].z),
+          len2(p[i + 1]) - len2(p[0]));
+      const x = solveLin(M, 3);
+      if (!x) { o.note = '4 点が同一平面上にあります'; break; }
+      o.kind = K.SPHERE; o.a = V(x[0], x[1], x[2]); o.r = len(sub(p[0], o.a)); o.ok = true; break;
+    }
+    case OP.CIRCLE3: {
+      const p = pts(3); if (!p) break;
+      let n = cross(sub(p[1], p[0]), sub(p[2], p[0]));
+      if (len(n) < 1e-12) { o.note = '3 点が一直線上にあります'; break; }
+      n = norm(n);
+      const d1 = sub(p[1], p[0]), d2 = sub(p[2], p[0]);
+      const M = [
+        2 * d1.x, 2 * d1.y, 2 * d1.z, len2(p[1]) - len2(p[0]),
+        2 * d2.x, 2 * d2.y, 2 * d2.z, len2(p[2]) - len2(p[0]),
+        n.x, n.y, n.z, dot(n, p[0])];
+      const x = solveLin(M, 3);
+      if (!x) break;
+      o.kind = K.CIRCLE; o.a = V(x[0], x[1], x[2]); o.b = n; o.r = len(sub(p[0], o.a)); o.ok = true; break;
+    }
+    case OP.HULL: {
+      const P = [];
+      for (const id of o.args) {
+        const q = D.get(id);
+        if (!q || !q.ok || q.kind !== K.POINT) return;
+        P.push(q.a);
+      }
+      if (P.length < 4) { o.note = '4 点以上が必要です'; break; }
+      // 頂点がひとつも動いていなければ、前に求めた位相をそのまま使う
+      if (o.topo && o.topo.ok && o.polyPts.length === P.length) {
+        let same = true;
+        for (let i = 0; i < P.length; i++) {
+          const a = P[i], b = o.polyPts[i];
+          if (a.x !== b.x || a.y !== b.y || a.z !== b.z) { same = false; break; }
+        }
+        if (same) {
+          o.kind = K.POLY; o.ok = true;
+          if (o.topo.coplanar) o.note = 'すべての点が同一平面上にあります（体積 0）';
+          break;
+        }
+      }
+      o.polyPts = P;
+      o.topo = convexHull(P);
+      if (!o.topo.ok) { o.note = '多面体になりません'; break; }
+      o.kind = K.POLY; o.ok = true;
+      if (o.topo.coplanar) o.note = 'すべての点が同一平面上にあります（体積 0）';
+      break;
+    }
+    case OP.POLYGON_PTS: {                     // n 個の点がなす面（n 角形）
+      const P = [];
+      for (const id of o.args) {
+        const q = D.get(id);
+        if (!q || !q.ok || q.kind !== K.POINT) return;
+        P.push(q.a);
+      }
+      makePolygon(o, P, true);                 // 同一平面かどうかも見る
+      break;
+    }
+    case OP.POLY_EDGE: {                       // 多面体の辺（頂点番号で覚える）
+      const h = A(0);
+      if (!h || !h.ok || h.kind !== K.POLY) break;
+      const i = o.idx[0], j = o.idx[1];
+      if (i == null || j == null || !h.polyPts[i] || !h.polyPts[j]) break;
+      if (len(sub(h.polyPts[j], h.polyPts[i])) < 1e-12) break;
+      o.parent = h.id;                         // 一覧では多面体のフォルダの中に入れる
+      o.kind = K.SEGMENT; o.a = h.polyPts[i]; o.b = h.polyPts[j]; o.ok = true; break;
+    }
+    case OP.POLY_FACE: {                       // 多面体の面（頂点番号の並びで覚える）
+      const h = A(0);
+      if (!h || !h.ok || h.kind !== K.POLY) break;
+      const P = o.idx.map(i => h.polyPts[i]);
+      if (P.some(p => !p)) break;
+      o.parent = h.id;                         // 一覧では多面体のフォルダの中に入れる
+      makePolygon(o, P, false);                // 凸包の面はもともと同一平面
+      break;
+    }
+    case OP.CENTROID_V: case OP.CENTROID_S: case OP.CENTROID_VOL: {
+      const h = A(0);
+      if (!h || !h.ok || h.kind !== K.POLY) break;
+      o.kind = K.POINT; o.ok = true;
+      o.a = o.op === OP.CENTROID_V ? centroidVerts(h.polyPts, h.topo)
+        : o.op === OP.CENTROID_S ? centroidSurface(h.polyPts, h.topo)
+          : centroidVolume(h.polyPts, h.topo);
+      break;
+    }
+    case OP.CIRCUMSPHERE: {
+      const h = A(0);
+      if (!h || !h.ok || h.kind !== K.POLY) break;
+      const s = circumsphere(h.polyPts, h.topo);
+      if (!s) { o.note = '外接球は存在しません（全頂点が同一球面上にない）'; break; }
+      o.kind = K.SPHERE; o.a = s.O; o.r = s.R; o.ok = true; break;
+    }
+    case OP.INSPHERE: {
+      const h = A(0);
+      if (!h || !h.ok || h.kind !== K.POLY) break;
+      const s = insphereTangent(h.polyPts, h.topo);
+      if (!s) { o.note = '全面に接する内接球は存在しません（最大内接球をお使いください）'; break; }
+      o.kind = K.SPHERE; o.a = s.O; o.r = s.r; o.ok = true; break;
+    }
+    case OP.MAXINSPHERE: {
+      const h = A(0);
+      if (!h || !h.ok || h.kind !== K.POLY) break;
+      const s = maxInsphere(h.polyPts, h.topo);
+      if (!s) { o.note = '内接球が求まりません'; break; }
+      o.kind = K.SPHERE; o.a = s.O; o.r = s.r; o.ok = true; break;
+    }
+    case OP.DISTANCE: {
+      const x = A(0), y = A(1);
+      if (!x || !y || !x.ok || !y.ok) break;
+      const px = objFacePlane(x), py = objFacePlane(y), lx = objLineLike(x), ly = objLineLike(y);
+      if (x.kind === K.POINT && y.kind === K.POINT) o.r = len(sub(x.a, y.a));
+      else if (x.kind === K.POINT && py) o.r = Math.abs(dot(norm(py.n), sub(x.a, py.p)));
+      else if (x.kind === K.POINT && ly) o.r = distPointLine(x.a, ly.p, ly.d);
+      else if (y.kind === K.POINT && px) o.r = Math.abs(dot(norm(px.n), sub(y.a, px.p)));
+      else if (y.kind === K.POINT && lx) o.r = distPointLine(y.a, lx.p, lx.d);
+      else break;
+      o.kind = K.NUMBER; o.ok = true; break;
+    }
+    case OP.LENGTH: {
+      const x = A(0); if (!x || !x.ok) break;
+      if (x.kind === K.SEGMENT) o.r = len(sub(x.b, x.a));
+      else if (x.kind === K.CIRCLE) o.r = 2 * PI * x.r;
+      else break;
+      o.kind = K.NUMBER; o.ok = true; break;
+    }
+    case OP.AREA: {
+      const x = A(0); if (!x || !x.ok) break;
+      if (x.kind === K.TRIANGLE) o.r = 0.5 * len(cross(sub(x.b, x.a), sub(x.c, x.a)));
+      else if (x.kind === K.POLYGON) o.r = x.r;
+      else if (x.kind === K.CIRCLE) o.r = PI * x.r * x.r;
+      else if (x.kind === K.SPHERE) o.r = 4 * PI * x.r * x.r;
+      else if (x.kind === K.POLY) o.r = x.topo.surf;
+      else break;
+      o.kind = K.NUMBER; o.ok = true; break;
+    }
+    case OP.VOLUME: {
+      const x = A(0); if (!x || !x.ok) break;
+      if (x.kind === K.POLY) o.r = x.topo.vol;
+      else if (x.kind === K.SPHERE) o.r = 4 / 3 * PI * x.r ** 3;
+      else break;
+      o.kind = K.NUMBER; o.ok = true; break;
+    }
+    case OP.RADIUS: {
+      const x = A(0);
+      if (!x || !x.ok || (x.kind !== K.SPHERE && x.kind !== K.CIRCLE)) break;
+      o.kind = K.NUMBER; o.r = x.r; o.ok = true; break;
+    }
+    case OP.NUMBER: o.kind = K.NUMBER; o.ok = true; break;
+  }
+  // どの経路を通っても、無限大や NaN を持った対象は「作れなかった」ことにする。
+  // 途中の場合分けを増やさずに、ここ 1 か所で断ち切る。
+  if (o.ok && !finiteObj(o)) { o.ok = false; o.note = '座標が大きすぎるか、計算が不安定です'; }
+}
+
+// -------------------------------------------------- 7. コマンドの構文解析
+const FN_TABLE = [
+  ['point', OP.XYZ, 3, 3], ['midpoint', OP.MIDPOINT, 1, 2], ['segment', OP.SEGMENT, 2, 2],
+  ['line', OP.LINE, 2, 2], ['ray', OP.RAY, 2, 2], ['polygon', OP.POLYGON_PTS, 3, 64],
+  ['triangle', OP.TRIANGLE, 3, 3], ['plane', OP.PLANE3, 2, 3], ['intersect', OP.INTERSECT, 2, 3],
+  ['angle', OP.ANGLE3, 2, 3], ['anglebisector', OP.BISECTOR, 3, 3], ['bisector', OP.BISECTOR, 3, 3],
+  ['tangentplane', OP.TANGENT_PLANE, 2, 2], ['perpendicular', OP.PERP_LINE, 2, 2],
+  ['perpendicularplane', OP.PERP_PLANE, 2, 2], ['parallel', OP.PARALLEL_LINE, 2, 2],
+  ['parallelplane', OP.PARALLEL_PLANE, 2, 2], ['perpbisector', OP.PERPBIS_PLANE, 1, 3],
+  ['foot', OP.FOOT, 2, 2], ['sphere', OP.SPHERE_CP, 2, 4], ['circle', OP.CIRCLE3, 3, 3],
+  ['hull', OP.HULL, 4, 64], ['polyhedron', OP.HULL, 4, 64],
+  ['edge', OP.POLY_EDGE, 3, 3], ['face', OP.POLY_FACE, 3, 64], ['centroid', OP.CENTROID_VOL, 1, 1],
+  ['vertexcentroid', OP.CENTROID_V, 1, 1], ['surfacecentroid', OP.CENTROID_S, 1, 1],
+  ['circumsphere', OP.CIRCUMSPHERE, 1, 1], ['insphere', OP.INSPHERE, 1, 1],
+  ['maxinsphere', OP.MAXINSPHERE, 1, 1], ['distance', OP.DISTANCE, 2, 2],
+  ['length', OP.LENGTH, 1, 1], ['area', OP.AREA, 1, 1], ['volume', OP.VOLUME, 1, 1],
+  ['radius', OP.RADIUS, 1, 1], ['center', OP.CENTER, 1, 1], ['pointon', OP.ON_OBJ, 1, 1]
+];
+const ALIAS = {
+  '点': 'point', '中点': 'midpoint', '線分': 'segment', '直線': 'line', '半直線': 'ray',
+  '三角形': 'triangle', '多角形': 'polygon', '平面': 'plane', '交点': 'intersect', '交線': 'intersect', '交わり': 'intersect',
+  '角': 'angle', '角度': 'angle', '二等分線': 'bisector', '接平面': 'tangentplane',
+  '垂線': 'perpendicular', '垂直平面': 'perpendicularplane', '平行線': 'parallel',
+  '平行平面': 'parallelplane', '垂直二等分面': 'perpbisector', '垂直二等分線': 'perpbisector',
+  '垂足': 'foot', '球': 'sphere', '円': 'circle', '凸包': 'hull', '多面体': 'hull',
+  '辺': 'edge', '面': 'face',
+  '重心': 'centroid', '頂点重心': 'vertexcentroid', '表面重心': 'surfacecentroid',
+  '外接球': 'circumsphere', '外心': 'circumsphere', '内接球': 'insphere', '内心': 'insphere',
+  '最大内接球': 'maxinsphere', '距離': 'distance', '長さ': 'length', '面積': 'area',
+  '体積': 'volume', '半径': 'radius', '中心': 'center', '対象上の点': 'pointon'
+};
+function lookupFn(raw) {
+  let s = ALIAS[raw] || raw;
+  s = s.toLowerCase();
+  return FN_TABLE.find(f => f[0] === s) || null;
+}
+function identChar(ch, first) {
+  if (/[A-Za-z_]/.test(ch)) return true;
+  if (!first && /[0-9]/.test(ch)) return true;
+  return ch.codePointAt(0) > 0x2000;
+}
+function resolveOp(D, fn, args, errBox) {
+  const kindOf = i => { const o = D.get(args[i]); return o ? o.kind : K.NONE; };
+  const isL = i => isLineLike(kindOf(i));
+  const isP = i => isPlaneLike(kindOf(i));
+  switch (fn[1]) {
+    case OP.ANGLE3:
+      if (args.length === 3) return OP.ANGLE3;
+      if (args.length === 2) {
+        if (isP(0) && isP(1)) return OP.ANGLE_PP;
+        if (isL(0) && isL(1)) return OP.ANGLE_LL;
+        errBox.err = '角: 3 点、または 2 直線／2 平面を指定してください';
+      }
+      return OP.ANGLE3;
+    case OP.LINE:
+      if (args.length === 2 && kindOf(0) === K.POINT && isL(1)) return OP.PARALLEL_LINE;
+      return OP.LINE;
+    case OP.POLY_FACE: case OP.POLYGON_PTS:
+      // 先頭が多面体なら「その面（頂点番号）」、点ばかりなら「n 点がなす面」
+      return kindOf(0) === K.POLY ? OP.POLY_FACE : OP.POLYGON_PTS;
+    case OP.PLANE3:
+      if (args.length === 2) {
+        const ok = (isL(0) && kindOf(1) === K.POINT) || (isL(1) && kindOf(0) === K.POINT);
+        if (!ok) errBox.err = '平面: 3 点、または 直線と点 を指定してください';
+        return OP.PLANE_LP;
+      }
+      return OP.PLANE3;
+    case OP.PERPBIS_PLANE:
+      if (args.length === 3) return OP.PERPBIS_LINE;
+      if (args.length === 2 && kindOf(0) === K.SEGMENT) return OP.PERPBIS_LINE;
+      return OP.PERPBIS_PLANE;
+    case OP.SPHERE_CP:
+      if (args.length === 4) return OP.SPHERE4;
+      if (args.length === 2) return kindOf(1) === K.NUMBER ? OP.SPHERE_CR : OP.SPHERE_CP;
+      errBox.err = '球: 中心と半径、中心と通る点、または 4 点を指定してください';
+      return OP.SPHERE_CP;
+    case OP.PERP_LINE:
+      if (args.length === 2 && kindOf(0) === K.POINT && (isL(1) || isP(1))) return OP.PERP_LINE;
+      errBox.err = '垂線: 点と、直線または平面を指定してください';
+      return OP.PERP_LINE;
+    case OP.PARALLEL_LINE:
+      if (args.length === 2 && kindOf(0) === K.POINT && isP(1)) return OP.PARALLEL_PLANE;
+      return OP.PARALLEL_LINE;
+    default: return fn[1];
+  }
+}
+// 作図ファイルは外から来るので、細工された行でも壊れないように上限を決めておく。
+const MAX_DEPTH = 32;      // 入れ子の深さ（再帰なのでスタックを守る）
+const MAX_NAME = 64;       // 名前の長さ
+const MAX_ARGS = 64;       // 引数の個数
+// 数を「1 始まりの番号」として読む。範囲外・NaN は -1（無効）にする。
+function indexFromNumber(v) { return (v >= 1 && v < 1e9) ? Math.round(v) - 1 : -1; }
+function parseExpr(P, hidden) {
+  const s = P.s;
+  const skip = () => { while (P.i < s.length && /[\s　]/.test(s[P.i])) P.i++; };
+  // 引数の中に式を書けるので、この関数は自分を呼ぶ。深さを見張ってスタックを守る。
+  P.depth = (P.depth || 0) + 1;
+  try {
+    if (P.depth > MAX_DEPTH) { P.err = '入れ子が深すぎます'; return 0; }
+    return parseExprBody(P, hidden, s, skip);
+  } finally { P.depth--; }
+}
+function parseExprBody(P, hidden, s, skip) {
+  skip();
+  if (P.i >= s.length) { P.err = '式が空です'; return 0; }
+  if (s[P.i] === '(') {
+    P.i++;
+    const v = [];
+    for (let k = 0; k < 3; k++) {
+      skip();
+      // 指数つき（1.5e-7 など）も読む。計算結果を貼り付けたときに必要になる。
+      const m = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?/.exec(s.slice(P.i));
+      if (!m) { P.err = '座標の数値が読めません'; return 0; }
+      if (!isFinite(parseFloat(m[0]))) { P.err = '座標の数が大きすぎます'; return 0; }
+      v.push(parseFloat(m[0])); P.i += m[0].length;
+      skip();
+      if (k < 2) { if (s[P.i] !== ',') { P.err = '座標は (x, y, z) の形です'; return 0; } P.i++; }
+    }
+    skip();
+    if (s[P.i] !== ')') { P.err = "')' がありません"; return 0; }
+    P.i++;
+    const o = newObj();
+    o.op = OP.XYZ; o.kind = K.POINT; o.a = V(v[0], v[1], v[2]);
+    o.def = `(${v[0]}, ${v[1]}, ${v[2]})`; o.visible = !hidden;
+    return P.doc.add(o);
+  }
+  const save = P.i;
+  const mn = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?/.exec(s.slice(P.i));
+  if (mn) {
+    if (!isFinite(parseFloat(mn[0]))) { P.err = '数が大きすぎます'; return 0; }
+    P.i += mn[0].length; skip();
+    if (P.i >= s.length || s[P.i] === ',' || s[P.i] === ')') {
+      const o = newObj();
+      o.op = OP.NUMBER; o.kind = K.NUMBER; o.r = parseFloat(mn[0]); o.ok = true;
+      o.visible = false; o.def = mn[0];
+      return P.doc.add(o);
+    }
+    P.i = save;
+  }
+  let st = P.i;
+  if (P.i < s.length && identChar(s[P.i], true)) {
+    P.i++;
+    while (P.i < s.length && identChar(s[P.i], false)) P.i++;
+  }
+  // 読む位置は全部進めたうえで、名前だけ切り詰める（長すぎる名前は命令にも当たらない）
+  const nm = s.slice(st, Math.min(P.i, st + MAX_NAME));
+  if (!nm) { P.err = '読み取れない文字があります'; return 0; }
+  skip();
+  if (s[P.i] === '(') {
+    const fn = lookupFn(nm);
+    if (!fn) { P.err = '知らない命令です: ' + nm; return 0; }
+    P.i++;
+    const args = [];
+    skip();
+    if (s[P.i] !== ')') {
+      for (; ;) {
+        const a = parseExpr(P, true);
+        if (!a) return 0;
+        args.push(a);
+        if (args.length > MAX_ARGS) { P.err = nm + ' の引数が多すぎます'; return 0; }
+        skip();
+        if (s[P.i] === ',') { P.i++; continue; }
+        break;
+      }
+    }
+    skip();
+    if (s[P.i] !== ')') { P.err = "')' がありません"; return 0; }
+    P.i++;
+    if (args.length < fn[2] || args.length > fn[3]) { P.err = nm + ' の引数の個数が違います'; return 0; }
+    const box = { err: '' };
+    const op = resolveOp(P.doc, fn, args, box);
+    if (box.err) { P.err = box.err; return 0; }
+    const o = newObj();
+    o.op = op; o.args = args; o.visible = !hidden;
+    if (op === OP.POLY_EDGE || op === OP.POLY_FACE) {
+      // 「多面体, 頂点番号, 頂点番号, …」の形。番号は 1 始まりで受け取る。
+      for (let i = 1; i < args.length; i++) {
+        const q = P.doc.get(args[i]);
+        if (!q || q.kind !== K.NUMBER) { P.err = '辺・面：多面体のあとに頂点番号を並べてください'; return 0; }
+        o.idx.push(indexFromNumber(q.r));
+      }
+      const tmp = args.slice(1);
+      P.doc.objs = P.doc.objs.filter(x => !tmp.includes(x.id));
+      o.args = [args[0]];
+    }
+    return P.doc.add(o);
+  }
+  let ex = P.doc.byName(nm);
+  if (!ex) {
+    const alias = AXIS_ALIAS[nm.toLowerCase()];   // xAxis / x-axis / x_axis も x軸 として通す
+    if (alias) ex = P.doc.byName(alias);
+  }
+  if (!ex) { P.err = '見つかりません: ' + nm; return 0; }
+  return ex.id;
+}
+// 「(x, y, z)」だけの式かどうかを見る。そうなら座標を返す。
+function coordsOnly(s) {
+  const m = /^\s*\(\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*,\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*,\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*\)\s*$/.exec(s);
+  return m ? V(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])) : null;
+}
+function runCommand(D, line) {
+  let s = line.trim();
+  if (!s) return { id: 0, err: '' };
+  let wantName = '';
+  const eq = s.indexOf('=');
+  if (eq >= 0) {
+    const lhs = s.slice(0, eq).trim();
+    let okName = lhs.length > 0;
+    for (let k = 0; k < lhs.length && okName; k++) if (!identChar(lhs[k], k === 0)) okName = false;
+    if (okName && lhs.length > MAX_NAME) return { id: 0, err: '名前が長すぎます（' + MAX_NAME + ' 文字まで）' };
+    if (okName) { wantName = lhs; s = s.slice(eq + 1); }
+  }
+  // 既にある点に座標を書くと、新しく作らずにその点を動かす。
+  // 動かせるのは自由点と、対象の上に乗った点（後者はいちばん近い所へ寄る）。
+  if (wantName) {
+    const ex = D.byName(wantName);
+    const p = ex ? coordsOnly(s) : null;
+    if (ex && p) {
+      if (ex.builtin) return { id: 0, err: wantName + ' は動かせません' };
+      if (ex.kind !== K.POINT) return { id: 0, err: wantName + ' は点ではありません' };
+      if (ex.op === OP.ON_OBJ) {
+        const host = ex.args.length ? D.get(ex.args[0]) : null;
+        if (!host || !host.ok) return { id: 0, err: wantName + ' の乗っている対象がありません' };
+        pointOnSetFrom(host, ex, p);              // 対象の上の、いちばん近い所へ
+      }
+      else if (ex.op === OP.FREE || ex.op === OP.XYZ) { ex.a = p; ex.def = s; }
+      else return { id: 0, err: wantName + ' は他の対象から決まる点なので動かせません' };
+      D.recompute();
+      return { id: ex.id, err: '', moved: true };
+    }
+  }
+  const before = D.objs.length;
+  const P = { s, i: 0, doc: D, err: '' };
+  const id = parseExpr(P, false);
+  if (!id || P.err) {
+    while (D.objs.length > before) D.objs.pop();
+    return { id: 0, err: P.err || '解釈できません' };
+  }
+  const o = D.get(id);
+  if (o) {
+    if (wantName) {
+      const clash = D.byName(wantName);
+      if (clash && clash.id !== id) {
+        while (D.objs.length > before) D.objs.pop();
+        return { id: 0, err: 'その名前は使われています: ' + wantName };
+      }
+      o.name = wantName;
+    }
+    o.visible = true;
+    if (!o.def) o.def = s;
+  }
+  D.recompute();
+  const o2 = D.get(id);
+  if (o2 && !o2.ok) {
+    const e = o2.note || 'この作図はできません';
+    D.remove(id); D.recompute();
+    return { id: 0, err: e };
+  }
+  const z = D.get(id);
+  if (z) z.color = defaultColor(z.kind);
+  return { id, err: '' };
+}
+
+// ------------------------------------------------------------ 8. カメラ
+class Cam {
+  constructor() {
+    this.yaw = 0.95; this.pitch = 0.34; this.dist = 22; this.fov = 30;
+    this.target = V(0, 0, 0); this.vw = 1; this.vh = 1;
+    this.build(1, 1);      // 最初の描画前にクリックが来ても壊れないように
+  }
+  build(W, H) {
+    this.vw = Math.max(1, W); this.vh = Math.max(1, H);
+    this.pitch = clampd(this.pitch, -1.5533, 1.5533);
+    const dir = V(Math.cos(this.pitch) * Math.cos(this.yaw), Math.cos(this.pitch) * Math.sin(this.yaw), Math.sin(this.pitch));
+    this.fwd = neg(dir);
+    this.right = norm(cross(this.fwd, V(0, 0, 1)));
+    this.up = cross(this.right, this.fwd);
+    this.eye = add(this.target, mul(dir, this.dist));
+    this.f = (this.vh * 0.5) / Math.tan(this.fov * PI / 180 * 0.5);
+  }
+  project(p) {
+    const r = sub(p, this.eye), vz = dot(r, this.fwd);
+    if (vz < 1e-6) return null;
+    return { x: this.vw * 0.5 + this.f * dot(r, this.right) / vz, y: this.vh * 0.5 - this.f * dot(r, this.up) / vz, z: vz };
+  }
+  depthOf(p) { return dot(sub(p, this.eye), this.fwd); }
+  rayDir(sx, sy) {
+    return norm(add(add(mul(this.right, (sx - this.vw * 0.5) / this.f),
+      mul(this.up, -(sy - this.vh * 0.5) / this.f)), this.fwd));
+  }
+}
+
+// -------------------------------------------------------------- 9. 状態
+const doc = new Doc();
+const cam = new Cam();
+const st = {
+  tool: 'move', sel: [], hoverId: 0, hoverSub: null, dragId: 0, propId: 0,
+  orbiting: false, panning: false, lastX: 0, lastY: 0, dragVertical: false,
+  pendingTool: false, pendingSel: 0, pendingSub: null, pendingCtrl: false, pressCtrl: false,
+  movedFar: false, pressX: 0, pressY: 0, expanded: {},
+  showGrid: true, showAxes: true, showLabels: true, dark: false,
+  planeAlpha: 0.22, sphereAlpha: 0.17, solidAlpha: 0.28,
+  msg: '', msgErr: false, hist: [], histPos: -1,
+  undo: [], redo: []
+};
+function say(m, err) { st.msg = m || ''; st.msgErr = !!err; }
+function pushUndo() {
+  st.undo.push(JSON.stringify(doc.objs.map(o => ({ ...o, topo: null }))));
+  if (st.undo.length > 80) st.undo.shift();
+  st.redo.length = 0;
+}
+function restore(json) {
+  doc.objs = JSON.parse(json);
+  doc.recompute();
+  st.sel = []; st.propId = 0;
+}
+function sceneRadius() {
+  let r = 3;
+  for (const o of doc.objs) {
+    if (!o.ok) continue;
+    if (o.kind === K.POINT) r = Math.max(r, len(o.a) + 1);
+    else if (o.kind === K.SPHERE || o.kind === K.CIRCLE) r = Math.max(r, len(o.a) + o.r + 0.5);
+  }
+  return Math.min(r, 60);
+}
+function fitView() {
+  let lo = V(1e18, 1e18, 1e18), hi = V(-1e18, -1e18, -1e18), any = false;
+  const acc = p => {
+    lo = V(Math.min(lo.x, p.x), Math.min(lo.y, p.y), Math.min(lo.z, p.z));
+    hi = V(Math.max(hi.x, p.x), Math.max(hi.y, p.y), Math.max(hi.z, p.z));
+    any = true;
+  };
+  for (const o of doc.objs) {
+    if (!o.ok || !o.visible) continue;
+    if (o.kind === K.POINT) acc(o.a);
+    else if (o.kind === K.SEGMENT) { acc(o.a); acc(o.b); }
+    else if (o.kind === K.TRIANGLE) { acc(o.a); acc(o.b); acc(o.c); }
+    else if (o.kind === K.SPHERE || o.kind === K.CIRCLE) { acc(sub(o.a, V(o.r, o.r, o.r))); acc(add(o.a, V(o.r, o.r, o.r))); }
+    else if (o.kind === K.POLY) for (const p of o.polyPts) acc(p);
+  }
+  if (!any) { cam.target = V(0, 0, 0); cam.dist = 22; return; }
+  cam.target = mul(add(lo, hi), 0.5);
+  const rad = Math.max(1, len(sub(hi, lo)) * 0.5);
+  cam.dist = clampd(rad / Math.tan(cam.fov * PI / 360) * 1.25, 1, 200);
+}
+
+// -------------------------------------------------------------- 10. 道具
+const TOOLS = [
+  ['move', '移動', '対象をクリックで選択、点をドラッグで移動', 0, null, ''],
+  ['point', '点', '空間をクリックで自由点、対象の上をクリックで束縛点', 0, null, ''],
+  ['intersect', '交わり', '交わる 2 つの対象を選んでください', 2, OP.INTERSECT, '..'],
+  ['midpoint', '中点', '2 点、または線分を選んでください', 2, OP.MIDPOINT, 'PP'],
+  ['segment', '線分', '2 点を選んでください', 2, OP.SEGMENT, 'PP'],
+  ['line', '直線', '2 点を選んでください', 2, OP.LINE, 'PP'],
+  ['ray', '半直線', '端点、通る点の順に選んでください', 2, OP.RAY, 'PP'],
+  ['triangle', '面（n角形）', '点を 3 つ以上選び、Enter か右クリックで確定', -1, OP.POLYGON_PTS, 'PPPPPPPPPPPPPPPP'],
+  ['plane3', '平面', '3 点、または 直線とその上にない点 を選んでください', 3, OP.PLANE3, 'PPP'],
+  ['angle3', '角（3点）', '3 点を選んでください（真ん中が頂点）', 3, OP.ANGLE3, 'PPP'],
+  ['angle2', '角（2つ）', '2 直線、または 2 平面を選んでください', 2, OP.ANGLE_LL, '..'],
+  ['bisector', '角の二等分線', '3 点を選んでください（真ん中が頂点）', 3, OP.BISECTOR, 'PPP'],
+  ['perp', '垂線', '点、つぎに直線か平面を選んでください', 2, OP.PERP_LINE, 'P.'],
+  ['perpplane', '垂直平面', '点、つぎに直線を選んでください', 2, OP.PERP_PLANE, 'P.'],
+  ['parallel', '平行線', '点、つぎに直線を選んでください', 2, OP.PARALLEL_LINE, 'P.'],
+  ['parplane', '平行平面', '点、つぎに平面を選んでください', 2, OP.PARALLEL_PLANE, 'P.'],
+  ['pbplane', '垂直二等分面', '2 点、または線分を選んでください', 2, OP.PERPBIS_PLANE, 'PP'],
+  ['pbline', '垂直二等分線', '線分（または 2 点）、つぎに乗せる平面を選んでください', 3, OP.PERPBIS_LINE, 'PP.'],
+  ['foot', '垂足', '点、つぎに直線か平面を選んでください', 2, OP.FOOT, 'P.'],
+  ['tangent', '接平面', '球、つぎに球面上の点を選んでください', 2, OP.TANGENT_PLANE, '..'],
+  ['sphcp', '球（2点）', '中心、つぎに通る点を選んでください', 2, OP.SPHERE_CP, 'PP'],
+  ['sph4', '球（4点）', '4 点を選んでください', 4, OP.SPHERE4, 'PPPP'],
+  ['circle3', '円（3点）', '3 点を選んでください', 3, OP.CIRCLE3, 'PPP'],
+  ['hull', '凸包（多面体）', '点を 4 つ以上選び、Enter か右クリックで確定', -1, OP.HULL, 'PPPPPPPPPPPPPPPP'],
+  ['centroid', '重心', '多面体を選んでください', 1, OP.CENTROID_VOL, '.'],
+  ['circum', '外接球', '多面体を選んでください', 1, OP.CIRCUMSPHERE, '.'],
+  ['insph', '内接球', '多面体を選んでください', 1, OP.INSPHERE, '.'],
+  ['maxinsph', '最大内接球', '多面体を選んでください', 1, OP.MAXINSPHERE, '.'],
+  ['distance', '距離', '2 つの対象を選んでください', 2, OP.DISTANCE, 'OO'],
+  ['area', '面積', '三角形・円・球・多面体を選んでください', 1, OP.AREA, '.'],
+  ['volume', '体積', '多面体か球を選んでください', 1, OP.VOLUME, '.'],
+  ['center', '中心', '円か球を選んでください', 1, OP.CENTER, '.'],
+  ['delete', '削除', '消したい対象をクリックしてください', 1, null, '.']
+];
+const T = id => TOOLS.find(t => t[0] === id);
+const segFor2Pts = t => t === 'midpoint' || t === 'pbplane' || t === 'pbline';
+function toolNeed(t) {
+  const td = T(t);
+  if (st.sel.length && segFor2Pts(t)) {
+    const first = doc.get(st.sel[0]);
+    if (first && first.kind === K.SEGMENT) return t === 'pbline' ? 2 : 1;
+  }
+  if (t === 'plane3') {
+    for (const id of st.sel) { const q = doc.get(id); if (q && isLineLike(q.kind)) return 2; }
+  }
+  return td[3];
+}
+function selCompatible(t) {
+  const td = T(t);
+  if (td[3] === 0 || !st.sel.length) return false;
+  for (let i = 0; i < st.sel.length; i++) {
+    const o = doc.get(st.sel[i]);
+    if (!o || !o.ok) return false;
+    const want = i < td[5].length ? td[5][i] : '.';
+    if (want === 'P' && o.kind !== K.POINT) {
+      if (i === 0 && o.kind === K.SEGMENT && segFor2Pts(t)) continue;
+      if (t === 'plane3' && isLineLike(o.kind)) continue;
+      return false;
+    }
+  }
+  return st.sel.length <= Math.max(1, toolNeed(t));
+}
+function applyTool() {
+  const td = T(st.tool);
+  if (td[3] <= 0) return;
+  if (st.sel.length < toolNeed(st.tool)) return;
+  pushUndo();
+  const kindAt = i => { const q = doc.get(st.sel[i]); return q ? q.kind : K.NONE; };
+  let op = td[4];
+  if (st.tool === 'angle2') op = isPlaneLike(kindAt(0)) ? OP.ANGLE_PP : OP.ANGLE_LL;
+  if (st.tool === 'plane3' && st.sel.length === 2) op = OP.PLANE_LP;
+
+  if (st.tool === 'intersect') {
+    const x = doc.get(st.sel[0]), y = doc.get(st.sel[1]);
+    let count = 1;
+    if (x && y && !intersectCurve(x, y)) {   // 曲線にならないなら点の数を数える
+      // 1 つも見つからないときも 1 回は作らせる。そうすれば
+      // 「なぜ作れないか」を対象の note から拾って伝えられる。
+      count = Math.min(Math.max(intersectPoints(x, y).length, 1), 64);
+    }
+    let made = 0; const names = [], dups = [];
+    for (let v = 0; v < count; v++) {
+      const o = newObj(); o.op = op; o.args = st.sel.slice(); o.variant = v;
+      const id = doc.add(o);
+      doc.recompute();
+      const z = doc.get(id);
+      const same = (z && z.ok && z.kind === K.POINT) ? findSamePoint(z.a, id) : null;
+      if (!z || !z.ok) { const nt = z ? z.note : ''; doc.remove(id); if (nt) say(nt, true); }
+      else if (same) { dups.push(same.name); doc.remove(id); }   // 札が重なるだけなので作らない
+      else { z.color = defaultColor(z.kind); z.def = '交わり'; names.push(z.name); made++; }
+    }
+    doc.recompute();
+    const dupTxt = dups.length ? '（' + dups.join(', ') + ' と重複するので作りませんでした）' : '';
+    if (made > 1) say(names.join(', ') + ' の ' + made + ' 個の交点を作りました' + dupTxt);
+    else if (made === 1) say(names[0] + ' を作りました（交わり）' + dupTxt);
+    else if (dups.length) say('交点は ' + dups.join(', ') + ' と重複するので、新しい点は作りませんでした', true);
+    else if (!st.msg) say('交わりません', true);
+    st.sel = [];
+    return;
+  }
+  const o = newObj(); o.op = op; o.args = st.sel.slice();
+  const id = doc.add(o);
+  doc.recompute();
+  const z = doc.get(id);
+  if (!z || !z.ok) {
+    const nt = z ? z.note : '';
+    doc.remove(id); doc.recompute();
+    say(nt || 'この作図はできません', true);
+    st.sel = [];
+    return;
+  }
+  // 既にある点と同じ場所なら作らない（札が重なるだけなので）。
+  // 代わりに、その点を選んでおいて続けて使えるようにする。
+  if (z.kind === K.POINT) {
+    const same = findSamePoint(z.a, id);
+    if (same) {
+      const nm = same.name, sid = same.id;
+      doc.remove(id); doc.recompute();
+      say(nm + ' と重複するので、新しい点は作りませんでした（' + nm + ' を選びました）', true);
+      st.sel = [sid]; st.propId = sid;
+      return;
+    }
+  }
+  z.color = defaultColor(z.kind); z.def = td[1];
+  say(z.name + ' を作りました（' + KNAME[z.kind] + '）');
+  st.sel = [];
+}
+function pickedForTool(id) {
+  if (!id) return;
+  const td = T(st.tool);
+  if (st.tool === 'delete') { deleteObjects([id]); return; }
+  if (td[3] === 0) { st.sel = [id]; st.propId = id; return; }
+  if (st.sel.length && st.sel[st.sel.length - 1] === id) return;
+  st.sel.push(id); st.propId = id;
+  if (isVarPointTool(st.tool)) { say('点を ' + st.sel.length + ' 個選びました（Enter か右クリックで確定）'); return; }
+  if (st.sel.length >= toolNeed(st.tool)) applyTool();
+  else say(td[2]);
+}
+function deleteObjects(ids) {
+  ids = ids.filter(i => { const o = doc.get(i); return o && !o.builtin; });   // 座標軸は消せない
+  if (!ids.length) { say('消したい対象を先にクリックして選んでください（座標軸は消せません）', true); return; }
+  const names = ids.map(i => { const o = doc.get(i); return o ? o.name : ''; }).filter(Boolean);
+  const before = doc.objs.length;
+  pushUndo();
+  for (const id of ids) doc.remove(id);
+  doc.recompute();
+  const gone = before - doc.objs.length;
+  st.sel = []; st.propId = 0; st.hoverId = 0;
+  let m = names.join(', ') + ' を削除しました';
+  if (gone > ids.length) m += '（これに依存していた ' + (gone - ids.length) + ' 個も一緒に消えました）';
+  say(m);
+}
+// 点をいくつでも選ぶ道具（凸包・面）を Enter か右クリックで確定する
+const isVarPointTool = t => t === 'hull' || t === 'triangle';
+function finishVarTool() {
+  if (!isVarPointTool(st.tool)) return;
+  const need = st.tool === 'hull' ? 4 : 3;
+  if (st.sel.length < need) { say(need + ' 点以上を選んでください', true); return; }
+  pushUndo();
+  const o = newObj(); o.op = T(st.tool)[4]; o.args = st.sel.slice();
+  const id = doc.add(o);
+  doc.recompute();
+  const z = doc.get(id);
+  if (!z || !z.ok) {
+    const nt = z ? z.note : '';
+    doc.remove(id); doc.recompute();
+    say(nt || (st.tool === 'hull' ? '多面体になりません' : '面になりません'), true);
+  } else {
+    z.color = defaultColor(z.kind); z.def = T(st.tool)[1];
+    say(z.name + ' を作りました（' + KNAME[z.kind] + '）');
+  }
+  st.sel = [];
+}
+
+// ------------------------------------------------------------ 11. 描画
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let DPR = 1, VW = 1, VH = 1;
+function resize() {
+  const r = cv.parentElement.getBoundingClientRect();
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  VW = Math.max(1, Math.round(r.width)); VH = Math.max(1, Math.round(r.height));
+  cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR);
+  draw();
+}
+const themeCol = () => st.dark
+  ? { bg1: '#1b1f28', bg2: '#0e1116', grid: '#2a3240', gridM: '#3a465a', ax: ['#c65b5b', '#4ea96b', '#5a86d8'], halo: '#14171d' }
+  : { bg1: '#f8fafd', bg2: '#e9eff7', grid: '#cfd8e4', gridM: '#afbcce', ax: ['#c03a3a', '#2e8b4a', '#2f5fc0'], halo: '#ffffff' };
+function rgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+function clipToScene(base, dir, R, rayOnly) {
+  const f = base;
+  const aq = len2(dir), bq = 2 * dot(f, dir), cq = len2(f) - R * R;
+  const disc = bq * bq - 4 * aq * cq;
+  if (disc <= 0) return null;
+  const sq = Math.sqrt(disc);
+  let t0 = (-bq - sq) / (2 * aq), t1 = (-bq + sq) / (2 * aq);
+  if (rayOnly) t0 = Math.max(t0, 0);
+  if (t1 <= t0) return null;
+  return [add(base, mul(dir, t0)), add(base, mul(dir, t1))];
+}
+function buildScene() {
+  const items = [], th = themeCol(), R = sceneRadius();
+  // 視点を動かしている間・点をつかんでいる間だけ分割を粗くする。静止画は変えない。
+  const moving = st.orbiting || st.panning || st.dragId !== 0;
+  const LOD = (fine, coarse) => moving ? coarse : fine;
+  const P = p => cam.project(p);
+  // 同じ位置に重なる要素の描き順を決めるための微小な奥行き優先度。
+  // 点 → 線 → 面 → 格子・軸 の順に手前へ来るようにする。
+  const BI = 1e-3 * cam.dist;
+  const seg = (a, b, col, alpha, w, sub_, bias) => {
+    const n = sub_ || 1, bz = bias || 0;
+    for (let i = 0; i < n; i++) {
+      const p = add(a, mul(sub(b, a), i / n)), q = add(a, mul(sub(b, a), (i + 1) / n));
+      const p0 = P(p), p1 = P(q);
+      if (!p0 || !p1) continue;
+      items.push({ t: 1, d: (p0.z + p1.z) / 2 + bz, x0: p0.x, y0: p0.y, x1: p1.x, y1: p1.y, col, alpha, w });
+    }
+  };
+  const tri = (a, b, c, col, alpha) => {
+    const p0 = P(a), p1 = P(b), p2 = P(c);
+    if (!p0 || !p1 || !p2) return;
+    items.push({ t: 0, d: (p0.z + p1.z + p2.z) / 3, pts: [p0, p1, p2], col, alpha });
+  };
+  if (st.showGrid) {
+    const m = Math.ceil(Math.min(R, 12));
+    for (let i = -m; i <= m; i++) {
+      const major = i === 0, c = major ? th.gridM : th.grid, a = major ? .75 : .45, w = major ? 1.4 : 1;
+      seg(V(-m, i, 0), V(m, i, 0), c, a, w, LOD(10, 3), 2 * BI);
+      seg(V(i, -m, 0), V(i, m, 0), c, a, w, LOD(10, 3), 2 * BI);
+    }
+  }
+  const axisLen = Math.min(R, 12) + .6;
+  for (const o of doc.objs) {
+    if (!o.ok || !o.visible) continue;
+    // 多面体の面・辺にカーソルが乗っているときは、総体としては光らせない
+    const subHov = st.hoverSub && st.hoverSub.poly === o.id;
+    const hi = st.sel.includes(o.id) || (o.id === st.hoverId && !subHov);
+    const col = hi ? COL.sel : o.color;
+    const wm = hi ? 1.7 : 1;
+    // 座標軸は対象でもあるが、見た目は格子と同じ「目盛り」の扱いにする
+    if (o.op === OP.AXIS) {
+      if (!st.showAxes) continue;
+      const d = sub(o.b, o.a);
+      seg(mul(d, -axisLen), mul(d, axisLen),
+        hi ? COL.sel : th.ax[o.variant], .9, 1.8 * wm, LOD(10, 3), 2 * BI);
+      continue;
+    }
+    switch (o.kind) {
+      case K.POINT: {
+        const p = P(o.a); if (!p) break;
+        // 点は掴む対象なので、半透明の面に埋もれないよう必ず最前面へ。
+        // 点どうしの前後関係だけは保つ。
+        items.push({ t: 2, d: -1e9 + p.z * 1e-6, x: p.x, y: p.y, r: hi ? 7 : 5.6, col });
+        break;
+      }
+      case K.SEGMENT: seg(o.a, o.b, col, .95, 2.2 * wm, LOD(16, 4), -BI); break;
+      case K.LINE: case K.RAY: {
+        const cl = clipToScene(o.a, sub(o.b, o.a), R * 1.5, o.kind === K.RAY);
+        if (cl) seg(cl[0], cl[1], col, .9, 2 * wm, LOD(24, 6), -BI);
+        break;
+      }
+      case K.TRIANGLE: {
+        const N = LOD(3, 1);
+        const Q = (i, j) => add(add(o.a, mul(sub(o.b, o.a), i / N)), mul(sub(o.c, o.a), j / N));
+        for (let i = 0; i < N; i++) for (let j = 0; j < N - i; j++) {
+          tri(Q(i, j), Q(i + 1, j), Q(i, j + 1), col, st.solidAlpha);
+          if (j + 1 <= N - i - 1) tri(Q(i + 1, j), Q(i + 1, j + 1), Q(i, j + 1), col, st.solidAlpha);
+        }
+        seg(o.a, o.b, col, .9, 1.8 * wm, 8, -BI);
+        seg(o.b, o.c, col, .9, 1.8 * wm, 8, -BI);
+        seg(o.c, o.a, col, .9, 1.8 * wm, 8, -BI);
+        break;
+      }
+      case K.PLANE: {
+        const n = norm(o.b), u = anyPerp(n), w = cross(n, u);
+        const ctr = footOnPlane(V(0, 0, 0), o.a, n), e = R * 1.05, N = LOD(5, 2);
+        for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+          const a0 = -e + 2 * e * i / N, a1 = -e + 2 * e * (i + 1) / N;
+          const b0 = -e + 2 * e * j / N, b1 = -e + 2 * e * (j + 1) / N;
+          const p00 = add(add(ctr, mul(u, a0)), mul(w, b0)), p10 = add(add(ctr, mul(u, a1)), mul(w, b0));
+          const p11 = add(add(ctr, mul(u, a1)), mul(w, b1)), p01 = add(add(ctr, mul(u, a0)), mul(w, b1));
+          tri(p00, p10, p11, col, st.planeAlpha); tri(p00, p11, p01, col, st.planeAlpha);
+        }
+        const c0 = add(add(ctr, mul(u, -e)), mul(w, -e)), c1 = add(add(ctr, mul(u, e)), mul(w, -e));
+        const c2 = add(add(ctr, mul(u, e)), mul(w, e)), c3 = add(add(ctr, mul(u, -e)), mul(w, e));
+        seg(c0, c1, col, .75, 1.6 * wm, 6); seg(c1, c2, col, .75, 1.6 * wm, 6);
+        seg(c2, c3, col, .75, 1.6 * wm, 6); seg(c3, c0, col, .75, 1.6 * wm, 6);
+        break;
+      }
+      case K.POLYGON: {
+        const P0 = o.polyPts;
+        for (let t = 0; t < P0.length; t++) tri(o.c, P0[t], P0[(t + 1) % P0.length], col, st.solidAlpha + .12);
+        for (let t = 0; t < P0.length; t++) seg(P0[t], P0[(t + 1) % P0.length], col, .95, 2.2 * wm, 6, -2 * BI);
+        break;
+      }
+      case K.CIRCLE: {
+        const u = anyPerp(o.b), w = cross(o.b, u), N = LOD(72, 28);
+        for (let i = 0; i < N; i++) {
+          const t0 = 2 * PI * i / N, t1 = 2 * PI * (i + 1) / N;
+          const p = add(o.a, mul(add(mul(u, Math.cos(t0)), mul(w, Math.sin(t0))), o.r));
+          const q = add(o.a, mul(add(mul(u, Math.cos(t1)), mul(w, Math.sin(t1))), o.r));
+          seg(p, q, col, .95, 2.2 * wm, 1, -BI);
+        }
+        break;
+      }
+      case K.SPHERE: {
+        const p = P(o.a); if (!p) break;
+        const D = len(sub(cam.eye, o.a));
+        if (D <= o.r * 1.0001) break;
+        const rr = cam.f * o.r / Math.sqrt(D * D - o.r * o.r);
+        items.push({ t: 3, d: cam.depthOf(o.a) + o.r, x: p.x, y: p.y, r: rr, col, front: false });
+        items.push({ t: 3, d: cam.depthOf(o.a) - o.r, x: p.x, y: p.y, r: rr, col, front: true });
+        break;
+      }
+      case K.POLY: {
+        const hs = subHov ? st.hoverSub : null;
+        for (const f of o.topo.faces) {
+          const hot = hs && hs.type === 'face' && hs.verts.join(',') === f.v.join(',');
+          const fc = hot ? COL.sel : col;
+          const fa = hot ? Math.min(.8, st.solidAlpha + .32) : st.solidAlpha;
+          const c = f.c;
+          for (let t = 0; t < f.v.length; t++)
+            tri(c, o.polyPts[f.v[t]], o.polyPts[f.v[(t + 1) % f.v.length]], fc, fa);
+        }
+        for (const e of o.topo.edges) {
+          const hot = hs && hs.type === 'edge' &&
+            ((hs.i === e.a && hs.j === e.b) || (hs.i === e.b && hs.j === e.a));
+          seg(o.polyPts[e.a], o.polyPts[e.b], hot ? COL.sel : col,
+            hot ? 1 : .92, (hot ? 4.5 : 2) * wm, 6, -(hot ? 3 : 1) * BI);
+        }
+        break;
+      }
+      case K.ANGLE: {
+        if (len2(o.b) < 1e-12) break;
+        const rad = Math.max(.25, sceneRadius() * .055), N = LOD(20, 8);
+        const axis0 = cross(o.b, o.c);
+        if (len(axis0) < 1e-12) break;
+        const axis = norm(axis0), perp = cross(axis, o.b);
+        let prev = null;
+        for (let i = 0; i <= N; i++) {
+          const t = o.r * i / N;
+          const d = add(mul(o.b, Math.cos(t)), mul(perp, Math.sin(t)));
+          const p = add(o.a, mul(d, rad));
+          if (prev) { seg(prev, p, col, .95, 2, 1); tri(o.a, prev, p, col, .22); }
+          prev = p;
+        }
+        break;
+      }
+    }
+  }
+  return items;
+}
+// 描き直しは 1 フレームに 1 回にまとめる。
+// マウスの移動通知は毎秒 125〜1000 回来るので、素直に描くと描画が詰まる。
+let _raf = 0;
+function draw() { if (!_raf) _raf = requestAnimationFrame(() => { _raf = 0; drawNow(); }); }
+function drawNow() {
+  if (_raf) { cancelAnimationFrame(_raf); _raf = 0; }
+  cam.build(VW, VH);
+  const th = themeCol();
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const g = ctx.createLinearGradient(0, 0, 0, VH);
+  g.addColorStop(0, th.bg1); g.addColorStop(1, th.bg2);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
+
+  const items = buildScene();
+  items.sort((a, b) => b.d - a.d);
+  ctx.lineCap = 'round';
+  for (const it of items) {
+    if (it.t === 0) {
+      ctx.globalAlpha = it.alpha; ctx.fillStyle = it.col;
+      ctx.beginPath();
+      ctx.moveTo(it.pts[0].x, it.pts[0].y);
+      ctx.lineTo(it.pts[1].x, it.pts[1].y);
+      ctx.lineTo(it.pts[2].x, it.pts[2].y);
+      ctx.closePath(); ctx.fill();
+    } else if (it.t === 1) {
+      ctx.globalAlpha = it.alpha; ctx.strokeStyle = it.col; ctx.lineWidth = it.w;
+      ctx.beginPath(); ctx.moveTo(it.x0, it.y0); ctx.lineTo(it.x1, it.y1); ctx.stroke();
+    } else if (it.t === 2) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(it.x, it.y, it.r + 1.8, 0, 2 * PI); ctx.fill();
+      ctx.fillStyle = it.col;
+      ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, 2 * PI); ctx.fill();
+    } else if (it.t === 3) {
+      const a = st.sphereAlpha * (it.front ? 1 : .75);
+      if (it.front) {
+        const rg = ctx.createRadialGradient(it.x - it.r * .35, it.y - it.r * .38, it.r * .04, it.x, it.y, it.r);
+        rg.addColorStop(0, rgba('#ffffff', a * 1.1));
+        rg.addColorStop(.55, rgba(it.col, a * .8));
+        rg.addColorStop(1, rgba(it.col, Math.min(1, a * 2.4)));
+        ctx.globalAlpha = 1; ctx.fillStyle = rg;
+      } else { ctx.globalAlpha = 1; ctx.fillStyle = rgba(it.col, a * .8); }
+      ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, 2 * PI); ctx.fill();
+      if (it.front) {
+        ctx.globalAlpha = .85; ctx.strokeStyle = it.col; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, 2 * PI); ctx.stroke();
+      }
+    }
+  }
+  ctx.globalAlpha = 1;
+  if (st.showLabels) {
+    ctx.font = 'italic 700 15px Cambria,Georgia,serif';
+    ctx.textBaseline = 'middle';
+    for (const o of doc.objs) {
+      if (!o.ok || !o.visible || !o.showLabel || o.kind === K.NUMBER) continue;
+      let anchor = null;
+      if (o.kind === K.POINT) anchor = o.a;
+      else if (o.kind === K.SEGMENT) anchor = mul(add(o.a, o.b), .5);
+      else if (o.kind === K.LINE || o.kind === K.RAY) anchor = add(o.a, mul(sub(o.b, o.a), 1.4));
+      else if (o.kind === K.TRIANGLE) anchor = mul(add(add(o.a, o.b), o.c), 1 / 3);
+      else anchor = o.a;
+      const p = cam.project(anchor);
+      if (!p) continue;
+      let txt = o.name;
+      if (o.kind === K.ANGLE) txt += ' ' + degOf(o.r).toFixed(2) + '°';
+      ctx.font = o.kind === K.POINT ? 'italic 700 15px Cambria,Georgia,serif' : '11px system-ui,sans-serif';
+      ctx.lineWidth = 3; ctx.strokeStyle = th.halo;
+      ctx.strokeText(txt, p.x + 9, p.y - 10);
+      ctx.fillStyle = o.color;
+      ctx.fillText(txt, p.x + 9, p.y - 10);
+    }
+  }
+  const hintEl = document.getElementById('hint');
+  const hintTxt = toolHint(T(st.tool));
+  if (hintEl._last !== hintTxt) { hintEl._last = hintTxt; hintEl.textContent = hintTxt; }
+  renderMsg();
+}
+function renderMsg() {
+  const e = document.getElementById('msg');
+  let m = trJP(st.msg);
+  if (st.sel.length) {
+    const names = st.sel.map(i => { const o = doc.get(i); return o ? o.name : ''; }).filter(Boolean);
+    m = (m ? m + '　／　' : '') + (LANG === 'ja'
+      ? names.join(', ') + ' を選択中（Esc か、何もない所をクリックで解除）'
+      : names.join(', ') + ' selected (press Esc, or click empty space, to deselect)');
+  }
+  if (e._last !== m) { e._last = m; e.textContent = m; }
+  const cls = st.msgErr ? 'err' : '';
+  if (e.className !== cls) e.className = cls;
+}
+
+// -------------------------------------------------------- 12. 拾い上げ
+function pickObject(mx, my) {
+  const rd = cam.rayDir(mx, my);
+  let best = 0, bestScore = 1e18, bestHit = V(0, 0, 0), bestSub = null;
+  for (const o of doc.objs) {
+    if (!o.ok || !o.visible || o.kind !== K.POINT) continue;
+    const p = cam.project(o.a); if (!p) continue;
+    const d = Math.hypot(p.x - mx, p.y - my);
+    if (d < 13 && d < bestScore) { bestScore = d; best = o.id; bestHit = o.a; }
+  }
+  if (best) return { id: best, hit: bestHit, sub: null };
+
+  // 曲線と、多面体の辺
+  bestScore = 1e18;
+  for (const o of doc.objs) {
+    if (!o.ok || !o.visible || o.kind !== K.POLY) continue;
+    for (const e of o.topo.edges) {
+      const A0 = o.polyPts[e.a], B0 = o.polyPts[e.b];
+      const p0 = cam.project(A0), p1 = cam.project(B0);
+      if (!p0 || !p1) continue;
+      const ax = mx - p0.x, ay = my - p0.y, bx = p1.x - p0.x, by = p1.y - p0.y;
+      const L2 = bx * bx + by * by;
+      const t = L2 > 0 ? clampd((ax * bx + ay * by) / L2, 0, 1) : 0;
+      const d = Math.hypot(ax - t * bx, ay - t * by);
+      if (d < 9 && d < bestScore) {
+        bestScore = d; best = o.id; bestHit = add(A0, mul(sub(B0, A0), t));
+        bestSub = { poly: o.id, type: 'edge', i: e.a, j: e.b };
+      }
+    }
+  }
+  for (const o of doc.objs) {
+    if (!o.ok || !o.visible) continue;
+    let pts = null;
+    if (o.op === OP.AXIS) {                    // 拾える範囲は描いてある範囲と同じにする
+      if (!st.showAxes) continue;
+      const m = mul(sub(o.b, o.a), Math.min(sceneRadius(), 12) + .6);
+      pts = [mul(m, -1), m];
+    }
+    else if (o.kind === K.SEGMENT) pts = [o.a, o.b];
+    else if (o.kind === K.LINE || o.kind === K.RAY) {
+      const cl = clipToScene(o.a, sub(o.b, o.a), sceneRadius() * 1.5, o.kind === K.RAY);
+      if (cl) pts = cl;
+    } else if (o.kind === K.CIRCLE) {
+      const u = anyPerp(o.b), w = cross(o.b, u);
+      pts = [];
+      for (let i = 0; i <= 72; i++) {
+        const t = 2 * PI * i / 72;
+        pts.push(add(o.a, mul(add(mul(u, Math.cos(t)), mul(w, Math.sin(t))), o.r)));
+      }
+    } else continue;
+    if (!pts) continue;
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const p0 = cam.project(pts[i]), p1 = cam.project(pts[i + 1]);
+      if (!p0 || !p1) continue;
+      const ax = mx - p0.x, ay = my - p0.y, bx = p1.x - p0.x, by = p1.y - p0.y;
+      const L2 = bx * bx + by * by;
+      const t = L2 > 0 ? clampd((ax * bx + ay * by) / L2, 0, 1) : 0;
+      const d = Math.hypot(ax - t * bx, ay - t * by);
+      if (d < 9 && d < bestScore) {
+        bestScore = d; best = o.id; bestSub = null;
+        bestHit = add(pts[i], mul(sub(pts[i + 1], pts[i]), t));
+      }
+    }
+  }
+  if (best) return { id: best, hit: bestHit, sub: bestSub };
+
+  let bestT = 1e18;
+  const rayTri = (a, b, c) => {
+    const e1 = sub(b, a), e2 = sub(c, a), pv = cross(rd, e2);
+    const det = dot(e1, pv);
+    if (Math.abs(det) < 1e-12) return null;
+    const inv = 1 / det, tv = sub(cam.eye, a);
+    const u = dot(tv, pv) * inv;
+    if (u < -1e-9 || u > 1 + 1e-9) return null;
+    const qv = cross(tv, e1), v = dot(rd, qv) * inv;
+    if (v < -1e-9 || u + v > 1 + 1e-9) return null;
+    const t = dot(e2, qv) * inv;
+    return t > 1e-6 ? t : null;
+  };
+  for (const o of doc.objs) {
+    if (!o.ok || !o.visible) continue;
+    if (o.kind === K.TRIANGLE) {
+      const t = rayTri(o.a, o.b, o.c);
+      if (t !== null && t < bestT) { bestT = t; best = o.id; bestHit = add(cam.eye, mul(rd, t)); }
+    } else if (o.kind === K.POLYGON) {
+      for (let k = 1; k + 1 < o.polyPts.length; k++) {
+        const t = rayTri(o.polyPts[0], o.polyPts[k], o.polyPts[k + 1]);
+        if (t !== null && t < bestT) { bestT = t; best = o.id; bestHit = add(cam.eye, mul(rd, t)); }
+      }
+    } else if (o.kind === K.PLANE) {
+      const den = dot(o.b, rd);
+      if (Math.abs(den) > 1e-9) {
+        const t = dot(o.b, sub(o.a, cam.eye)) / den, X = add(cam.eye, mul(rd, t));
+        const ctr = footOnPlane(V(0, 0, 0), o.a, o.b);
+        if (t > 1e-6 && len(sub(X, ctr)) < sceneRadius() * 1.6 && t < bestT) { bestT = t; best = o.id; bestHit = X; }
+      }
+    } else if (o.kind === K.SPHERE) {
+      const f = sub(cam.eye, o.a);
+      const bq = 2 * dot(f, rd), cq = len2(f) - o.r * o.r, disc = bq * bq - 4 * cq;
+      if (disc >= 0) {
+        const t = (-bq - Math.sqrt(disc)) / 2;
+        if (t > 1e-6 && t < bestT) { bestT = t; best = o.id; bestHit = add(cam.eye, mul(rd, t)); }
+      }
+    } else if (o.kind === K.POLY) {
+      for (const f of o.topo.faces) for (let k = 1; k + 1 < f.v.length; k++) {
+        const t = rayTri(o.polyPts[f.v[0]], o.polyPts[f.v[k]], o.polyPts[f.v[k + 1]]);
+        if (t !== null && t < bestT) {
+          bestT = t; best = o.id; bestHit = add(cam.eye, mul(rd, t));
+          bestSub = { poly: o.id, type: 'face', verts: f.v.slice() };
+        }
+      }
+    } else if (bestSub && bestSub.poly === o.id) {
+      // 上の辺の判定で当たっている場合はそのまま
+    }
+  }
+  return { id: best, hit: bestHit, sub: bestSub };
+}
+
+// 部分が同じものを指しているか
+function sameSub(a, b) {
+  if (!a || !b || a.poly !== b.poly || a.type !== b.type) return false;
+  if (a.type === 'edge') return (a.i === b.i && a.j === b.j) || (a.i === b.j && a.j === b.i);
+  return a.verts.join(',') === b.verts.join(',');
+}
+// 多面体の部分（辺・面）を、実体のある対象にする。同じものが既にあればそれを返す。
+function materializeSub(sub) {
+  const ex = findSub(sub);                       // 探し方は findSub にまとめてある
+  // 隠してある部分をもう一度クリックしたら、また見えるようにする
+  // （ダブルクリックで隠したものを、同じ所をクリックして戻せる）
+  if (ex) { ex.visible = true; return ex.id; }
+  const o = newObj();
+  o.op = sub.type === 'edge' ? OP.POLY_EDGE : OP.POLY_FACE;
+  o.args = [sub.poly];
+  o.idx = sub.type === 'edge' ? [sub.i, sub.j] : sub.verts.slice();
+  o.parent = sub.poly;
+  const id = doc.add(o);
+  doc.recompute();
+  const z = doc.get(id), h = doc.get(sub.poly);
+  if (z) {
+    z.color = defaultColor(z.kind);
+    z.def = (sub.type === 'edge' ? '辺' : '面') + '（' + (h ? h.name : '') + '）';
+  }
+  return id;
+}
+function pickSpace(mx, my, zPlane) {
+  const rd = cam.rayDir(mx, my);
+  if (Math.abs(rd.z) < 1e-6) return add(cam.eye, mul(rd, cam.dist));
+  const t = (zPlane - cam.eye.z) / rd.z;
+  if (t < .05) return add(cam.eye, mul(rd, cam.dist));
+  return add(cam.eye, mul(rd, t));
+}
+function toolClick(mx, my) {
+  const td = T(st.tool);
+  const pk = pickObject(mx, my);
+  let id = pk.id;
+  // 多面体の面・辺の上をクリックしたら、その部分を取り出して使う。
+  // Ctrl を押していれば多面体そのもの（総体）を使う。
+  if (pk.sub && !st.pressCtrl) id = materializeSub(pk.sub);
+  if (st.tool === 'delete') { if (id) deleteObjects([id]); return; }
+  if (st.tool === 'move') {
+    if (id) { st.sel = [id]; st.propId = id; } else { st.sel = []; st.propId = 0; }
+    return;
+  }
+  if (st.tool === 'point') {
+    const o = newObj();
+    if (id) {
+      const host = doc.get(id);
+      // 既にある点の上をクリックしたときは、重ねて作らずにその点を選ぶ
+      if (host && host.kind === K.POINT) {
+        st.sel = [host.id]; st.propId = host.id;
+        say(host.name + ' は既にあります（重ねては作りません）', true);
+        return;
+      }
+      if (host && (isLineLike(host.kind) || host.kind === K.CIRCLE || host.kind === K.SPHERE ||
+        host.kind === K.PLANE || host.kind === K.TRIANGLE || host.kind === K.POLYGON)) {
+        o.op = OP.ON_OBJ; o.args = [id];
+        pointOnSetFrom(host, o, pk.hit);
+        o.def = '上の点: ' + host.name;
+      } else { o.op = OP.FREE; o.a = pk.hit; }
+    } else { o.op = OP.FREE; o.a = pickSpace(mx, my, 0); }
+    o.kind = K.POINT; o.color = COL.point;
+    pushUndo();
+    const nid = doc.add(o);
+    doc.recompute();
+    const z = doc.get(nid);
+    say(z ? z.name + ' を作りました' : '');
+    return;
+  }
+  if (!id) {
+    const k = st.sel.length;
+    const want = k < td[5].length ? td[5][k] : '.';
+    let wantPoint = want === 'P';
+    if (st.sel.length && segFor2Pts(st.tool)) {
+      const first = doc.get(st.sel[0]);
+      if (first && first.kind === K.SEGMENT) wantPoint = false;
+    }
+    if (st.tool === 'plane3') {
+      for (const sid of st.sel) { const q = doc.get(sid); if (q && isLineLike(q.kind)) { wantPoint = true; break; } }
+    }
+    if (!wantPoint) { say('対象をクリックしてください', true); return; }
+    if (!st.sel.length) pushUndo();
+    const o = newObj();
+    o.op = OP.FREE; o.kind = K.POINT; o.color = COL.point;
+    o.a = pickSpace(mx, my, 0);
+    id = doc.add(o);
+    doc.recompute();
+  }
+  pickedForTool(id);
+}
+
+// -------------------------------------------------------------- 13. 入力
+function canvasPos(ev) {
+  const r = cv.getBoundingClientRect();
+  return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+}
+// 選んである対象をもう一度ダブルクリックしたら隠す。
+// 多面体から取り出した面だけを消したいときに使う。
+// 作図の道具を持っているときは、二度目の押下も引数を選ぶ操作なので働かせない。
+cv.addEventListener('dblclick', ev => {
+  if (st.tool !== 'move') return;
+  const p = canvasPos(ev);
+  const pk = pickObject(p.x, p.y);
+  // Ctrl なしなら取り出してある部分を、Ctrl つきなら多面体そのものを指す
+  let id = pk.id;
+  if (pk.sub && !(ev.ctrlKey || ev.metaKey)) { const z = findSub(pk.sub); id = z ? z.id : 0; }
+  const o = id ? doc.get(id) : null;
+  if (!o || o.builtin || !st.sel.includes(id)) return;
+  pushUndo();
+  o.visible = false;
+  st.sel = []; st.propId = 0; st.hoverId = 0; st.hoverSub = null;
+  say(o.name + ' を隠しました（一覧の升目で戻せます）');
+  refresh();
+});
+cv.addEventListener('mousedown', ev => {
+  if (ev.button === 2 || ev.button === 1) {
+    if (ev.button === 2 && isVarPointTool(st.tool) && st.sel.length) { finishVarTool(); refresh(); return; }
+    st.panning = true;
+    const p = canvasPos(ev); st.lastX = p.x; st.lastY = p.y;
+    return;
+  }
+  document.getElementById('cmd').blur();
+  const p = canvasPos(ev);
+  st.dragVertical = ev.shiftKey;
+  st.pressCtrl = ev.ctrlKey || ev.metaKey;
+  if (st.tool === 'move') {
+    const pk = pickObject(p.x, p.y);
+    const o = pk.id ? doc.get(pk.id) : null;
+    const movable = o && o.kind === K.POINT && (o.op === OP.FREE || o.op === OP.XYZ || o.op === OP.ON_OBJ);
+    if (pk.id && movable && !st.pressCtrl) {
+      pushUndo(); st.dragId = pk.id; st.sel = [pk.id]; st.propId = pk.id;
+    } else if (pk.id) {
+      st.pendingSel = pk.id; st.pendingSub = pk.sub; st.pendingCtrl = st.pressCtrl;
+      st.movedFar = false; st.pressX = p.x; st.pressY = p.y;
+    } else { st.orbiting = true; st.sel = []; st.propId = 0; }
+  } else {
+    st.pendingTool = true; st.movedFar = false; st.pressX = p.x; st.pressY = p.y;
+  }
+  st.lastX = p.x; st.lastY = p.y;
+  draw();          // 押した時点では絵だけ更新（一覧は離した時にまとめて）
+});
+window.addEventListener('mousemove', ev => {
+  const p = canvasPos(ev);
+  if ((st.pendingTool || st.pendingSel) && !st.movedFar &&
+    Math.hypot(p.x - st.pressX, p.y - st.pressY) > 5) {
+    st.movedFar = true; st.orbiting = true; st.lastX = p.x; st.lastY = p.y;
+  }
+  if (st.dragId) {
+    const o = doc.get(st.dragId);
+    if (o) {
+      const rd = cam.rayDir(p.x, p.y);
+      if (o.op === OP.ON_OBJ && o.args.length) {
+        const host = doc.get(o.args[0]);
+        if (host && host.ok) {
+          let target = add(cam.eye, mul(rd, cam.dist));
+          if (host.kind === K.SPHERE) {
+            const f = sub(cam.eye, host.a);
+            const bq = 2 * dot(f, rd), cq = len2(f) - host.r * host.r, disc = bq * bq - 4 * cq;
+            if (disc >= 0) target = add(cam.eye, mul(rd, (-bq - Math.sqrt(disc)) / 2));
+            else target = add(host.a, mul(norm(sub(add(cam.eye, mul(rd, -dot(f, rd))), host.a)), host.r));
+          } else if (host.kind === K.PLANE || host.kind === K.TRIANGLE ||
+                     host.kind === K.POLYGON || host.kind === K.CIRCLE) {
+            const pl = objPlane(host), den = dot(pl.n, rd);
+            if (Math.abs(den) > 1e-9) target = add(cam.eye, mul(rd, dot(pl.n, sub(pl.p, cam.eye)) / den));
+          } else {
+            const ln = objLineLike(host);
+            if (ln) {
+              const w0 = sub(ln.p, cam.eye);
+              const aa = dot(ln.d, ln.d), bb = dot(ln.d, rd);
+              const dd = dot(ln.d, w0), ee = dot(rd, w0);
+              const den = aa - bb * bb;
+              if (Math.abs(den) > 1e-12) target = add(ln.p, mul(ln.d, (bb * ee - dd) / den));
+            }
+          }
+          pointOnSetFrom(host, o, target);
+        }
+      } else {
+        if (st.dragVertical) {
+          const n = norm(V(cam.fwd.x, cam.fwd.y, 0)), den = dot(n, rd);
+          if (Math.abs(den) > 1e-6) {
+            const t = dot(n, sub(o.a, cam.eye)) / den;
+            o.a = V(o.a.x, o.a.y, add(cam.eye, mul(rd, t)).z);
+          }
+        } else {
+          if (Math.abs(rd.z) > 1e-6) {
+            const t = (o.a.z - cam.eye.z) / rd.z;
+            if (t > .05) { const X = add(cam.eye, mul(rd, t)); o.a = V(X.x, X.y, o.a.z); }
+          }
+        }
+        o.op = OP.FREE;
+      }
+      doc.recompute();
+    }
+  } else if (st.orbiting) {
+    cam.yaw += (p.x - st.lastX) * .008; cam.pitch += (p.y - st.lastY) * .008;
+  } else if (st.panning) {
+    const k = cam.dist * .0016;
+    cam.target = add(sub(cam.target, mul(cam.right, (p.x - st.lastX) * k)), mul(cam.up, (p.y - st.lastY) * k));
+  } else if (ev.target === cv) {
+    const pk = pickObject(p.x, p.y);
+    if (pk.id !== st.hoverId || !sameSub(pk.sub, st.hoverSub)) {
+      st.hoverId = pk.id; st.hoverSub = pk.sub; draw();
+    }
+    cv.style.cursor = pk.id ? 'pointer' : 'default';
+  }
+  st.lastX = p.x; st.lastY = p.y;
+  if (st.dragId || st.orbiting || st.panning) draw();
+});
+window.addEventListener('mouseup', ev => {
+  const p = canvasPos(ev);
+  if (st.pendingTool) { if (!st.movedFar) toolClick(p.x, p.y); st.pendingTool = false; }
+  if (st.pendingSel) {
+    if (!st.movedFar) {
+      if (st.pendingSub && !st.pendingCtrl) {
+        // 多面体の面・辺をクリック → その部分を取り出して選ぶ
+        pushUndo();
+        const id = materializeSub(st.pendingSub);
+        st.sel = [id]; st.propId = id;
+        const z = doc.get(id);
+        say(z ? (z.name + ' を取り出しました（' + KNAME[z.kind] + '）') : '');
+      } else if (st.pendingCtrl && !st.pendingSub) {
+        const i = st.sel.indexOf(st.pendingSel);
+        if (i < 0) st.sel.push(st.pendingSel); else st.sel.splice(i, 1);
+        st.propId = st.pendingSel;
+      } else {
+        st.sel = [st.pendingSel]; st.propId = st.pendingSel;
+        if (st.pendingSub) {
+          const h = doc.get(st.pendingSel);
+          say(h ? (h.name + ' を総体として選びました') : '');
+        }
+      }
+    }
+    st.pendingSel = 0; st.pendingSub = null;
+  }
+  st.movedFar = false;
+  st.dragId = 0; st.orbiting = false; st.panning = false;
+  refresh();
+});
+cv.addEventListener('contextmenu', e => e.preventDefault());
+cv.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  cam.dist = clampd(cam.dist * Math.pow(1.0015, ev.deltaY), .5, 200);
+  draw();
+}, { passive: false });
+
+// タッチ（iPad など）：1 本指はマウス左、2 本指は平行移動と拡大縮小
+let touchMode = 0, lastDist = 0, lastMid = null;
+cv.addEventListener('touchstart', ev => {
+  ev.preventDefault();
+  if (ev.touches.length === 1) {
+    touchMode = 1;
+    const t = ev.touches[0];
+    cv.dispatchEvent(new MouseEvent('mousedown', { clientX: t.clientX, clientY: t.clientY, button: 0 }));
+  } else if (ev.touches.length === 2) {
+    touchMode = 2;
+    window.dispatchEvent(new MouseEvent('mouseup', { clientX: 0, clientY: 0 }));
+    const [a, b] = ev.touches;
+    lastDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    lastMid = { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
+  }
+}, { passive: false });
+cv.addEventListener('touchmove', ev => {
+  ev.preventDefault();
+  if (touchMode === 1 && ev.touches.length === 1) {
+    const t = ev.touches[0];
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: t.clientX, clientY: t.clientY }));
+  } else if (touchMode === 2 && ev.touches.length === 2) {
+    const [a, b] = ev.touches;
+    const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    const mid = { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
+    if (lastDist > 0) cam.dist = clampd(cam.dist * (lastDist / d), .5, 200);
+    const k = cam.dist * .0016;
+    cam.target = add(sub(cam.target, mul(cam.right, (mid.x - lastMid.x) * k)), mul(cam.up, (mid.y - lastMid.y) * k));
+    lastDist = d; lastMid = mid;
+    draw();
+  }
+}, { passive: false });
+cv.addEventListener('touchend', ev => {
+  ev.preventDefault();
+  if (touchMode === 1) {
+    const t = ev.changedTouches[0];
+    window.dispatchEvent(new MouseEvent('mouseup', { clientX: t.clientX, clientY: t.clientY }));
+  }
+  touchMode = 0; lastDist = 0;
+}, { passive: false });
+
+const cmdEl = document.getElementById('cmd');
+cmdEl.addEventListener('keydown', ev => {
+  if (ev.key === 'Enter') {
+    const line = cmdEl.value.trim();
+    if (!line) return;
+    pushUndo();
+    const r = runCommand(doc, line);
+    if (r.id) {
+      const o = doc.get(r.id);
+      if (r.moved && o) { st.sel = [o.id]; st.propId = o.id; say(o.name + ' を動かしました ' + objValue(o)); }
+      else say((o ? o.name : '') + ' を作りました（' + (o ? KNAME[o.kind] : '') + '）');
+      st.hist.push(line); st.histPos = -1;
+      cmdEl.value = '';
+    } else { st.undo.pop(); say(r.err, true); }
+    doc.recompute();
+    refresh();
+    ev.preventDefault();
+  } else if (ev.key === 'ArrowUp') {
+    if (st.hist.length) {
+      if (st.histPos < 0) st.histPos = st.hist.length - 1; else if (st.histPos > 0) st.histPos--;
+      cmdEl.value = st.hist[st.histPos];
+    }
+    ev.preventDefault();
+  } else if (ev.key === 'ArrowDown') {
+    if (st.histPos >= 0 && st.histPos + 1 < st.hist.length) { st.histPos++; cmdEl.value = st.hist[st.histPos]; }
+    else { st.histPos = -1; cmdEl.value = ''; }
+    ev.preventDefault();
+  } else if (ev.key === 'Escape') { cmdEl.blur(); }
+  ev.stopPropagation();
+});
+window.addEventListener('keydown', ev => {
+  if (document.activeElement === cmdEl) return;
+  const ctrl = ev.ctrlKey || ev.metaKey;
+  switch (ev.key) {
+    case 'Enter': if (isVarPointTool(st.tool)) finishVarTool(); else cmdEl.focus(); break;
+    case 'Escape': st.sel = []; st.tool = 'move'; say(''); break;
+    case 'Delete': case 'Backspace': {
+      const victims = st.sel.length ? st.sel.slice() : (st.hoverId ? [st.hoverId] : []);
+      deleteObjects(victims);
+      ev.preventDefault(); break;
+    }
+    case 'z': case 'Z': if (ctrl && st.undo.length) { st.redo.push(JSON.stringify(doc.objs.map(o => ({ ...o, topo: null })))); restore(st.undo.pop()); } break;
+    case 'y': case 'Y': if (ctrl && st.redo.length) { st.undo.push(JSON.stringify(doc.objs.map(o => ({ ...o, topo: null })))); restore(st.redo.pop()); } break;
+    case 'm': case 'M': st.tool = 'move'; st.sel = []; break;
+    case 'p': case 'P': st.tool = 'point'; st.sel = []; break;
+    case 'f': case 'F': fitView(); break;
+    case 'Home': cam.yaw = .95; cam.pitch = .34; cam.target = V(0, 0, 0); cam.dist = 22; break;
+    default: return;
+  }
+  refresh();
+});
+
+// -------------------------------------------------------------- 14. UI
+let _toolBtns = null;
+function buildToolbar() {
+  if (_toolBtns) {          // 作り直さず、押されている道具の印だけ付け替える
+    for (const b of _toolBtns) {
+      const on = st.tool === b._tool;
+      if (b._on !== on) { b._on = on; b.className = on ? 'on' : ''; }
+    }
+    return;
+  }
+  const g = document.getElementById('toolgrid');
+  g.innerHTML = '';
+  _toolBtns = [];
+  for (const td of TOOLS) {
+    const b = document.createElement('button');
+    b.textContent = toolLabel(td);
+    b._tool = td[0]; b._on = (st.tool === td[0]);
+    b.className = b._on ? 'on' : '';
+    _toolBtns.push(b);
+    b.onclick = () => {
+      const nt = td[0];
+      const keep = selCompatible(nt);
+      st.tool = nt;
+      if (!keep) st.sel = [];
+      say(td[2]);
+      if (td[3] > 0 && st.sel.length >= toolNeed(nt)) applyTool();
+      refresh();
+    };
+    g.appendChild(b);
+  }
+}
+function fmt(v) {
+  let s = v.toFixed(6);
+  if (s.includes('.')) s = s.replace(/0+$/, '').replace(/\.$/, '');
+  return s;
+}
+function objValue(o) {
+  if (!o.ok) return o.note ? trJP(o.note) : (LANG === 'ja' ? '（作れません）' : '(cannot be created)');
+  const ja = LANG === 'ja';
+  switch (o.kind) {
+    case K.POINT: return `(${o.a.x.toFixed(3)}, ${o.a.y.toFixed(3)}, ${o.a.z.toFixed(3)})`;
+    case K.SEGMENT: return (ja ? '長さ ' : 'Length ') + len(sub(o.b, o.a)).toFixed(5);
+    case K.SPHERE: case K.CIRCLE: return (ja ? '半径 ' : 'Radius ') + o.r.toFixed(5);
+    case K.ANGLE: return degOf(o.r).toFixed(4) + '°';
+    case K.NUMBER: return fmt(o.r);
+    case K.TRIANGLE: return (ja ? '面積 ' : 'Area ') + (0.5 * len(cross(sub(o.b, o.a), sub(o.c, o.a)))).toFixed(5);
+    case K.PLANE: return (ja ? '法線 (' : 'Normal (') + o.b.x.toFixed(3) + ', ' + o.b.y.toFixed(3) + ', ' + o.b.z.toFixed(3) + ')';
+    case K.LINE: case K.RAY: {
+      const d = norm(sub(o.b, o.a));
+      return (ja ? '方向 (' : 'Direction (') + d.x.toFixed(3) + ', ' + d.y.toFixed(3) + ', ' + d.z.toFixed(3) + ')';
+    }
+    case K.POLY: return `V=${o.topo.vertIdx.length} E=${o.topo.edges.length} F=${o.topo.faces.length}`;
+    case K.POLYGON: return ja ? (o.polyPts.length + ' 角形　面積 ' + o.r.toFixed(5))
+      : (o.polyPts.length + '-gon, area ' + o.r.toFixed(5));
+  }
+  return '';
+}
+// 対象 z が、多面体の部分 sub そのものかどうか。
+// 見比べ方はここ 1 か所にまとめ、探す範囲だけを呼ぶ側で決める。
+// 面は頂点の並べ方（始点・回り方）が違っても同じ面なので、番号の集まりとして見比べる。
+function subMatches(z, sub) {
+  const op = sub.type === 'edge' ? OP.POLY_EDGE : OP.POLY_FACE;
+  if (z.op !== op || z.args[0] !== sub.poly) return false;
+  if (sub.type === 'edge')
+    return z.idx.length === 2 &&
+      ((z.idx[0] === sub.i && z.idx[1] === sub.j) || (z.idx[0] === sub.j && z.idx[1] === sub.i));
+  return z.idx.length === sub.verts.length && sub.verts.every(v => z.idx.includes(v));
+}
+// 既に取り出してある部分（辺・面）を探す
+function findSub(sub) {
+  return doc.objs.find(o => subMatches(o, sub)) || null;
+}
+// 同じ場所に点が既にあるかを探す。
+// 外接球と多面体の交点（＝頂点）のように、作っても札が重なるだけの点を防ぐ。
+function findSamePoint(p, skipId) {
+  const tol = 1e-7 * Math.max(1, sceneRadius());
+  for (const o of doc.objs) {
+    if (o.id === skipId || !o.ok || o.kind !== K.POINT) continue;
+    if (len(sub(o.a, p)) <= tol) return o;
+  }
+  return null;
+}
+function chooseObject(id) {
+  if (T(st.tool)[3] !== 0) pickedForTool(id);
+  else { st.sel = [id]; st.propId = id; }
+  refresh();
+}
+function buildList() {
+  const L = document.getElementById('objlist');
+  L.innerHTML = '';
+  if (!doc.objs.length) {
+    L.innerHTML = LANG === 'ja'
+      ? '<div style="padding:14px;font-size:12.5px;color:var(--dim)">まだ何もありません。<br>左の「点」で点を置いてみてください。</div>'
+      : '<div style="padding:14px;font-size:12.5px;color:var(--dim)">Nothing here yet.<br>Use "Point" on the left to place one.</div>';
+    return;
+  }
+  // 1 行を組み立てる。obj が無い（まだ取り出していない）部分は薄く出す。
+  const mkRow = (opts) => {
+    const row = document.createElement('div');
+    row.className = 'row' + (opts.sel ? ' sel' : '') + (opts.bad ? ' bad' : '') + (opts.ghost ? ' ghost' : '');
+    row.style.paddingLeft = (10 + opts.depth * 16) + 'px';
+    if (opts.twisty !== undefined) {
+      const tw = document.createElement('div');
+      tw.className = 'tw'; tw.textContent = opts.twisty ? '▾' : '▸';
+      tw.onclick = e => { e.stopPropagation(); st.expanded[opts.id] = !opts.twisty; refresh(); };
+      row.appendChild(tw);
+    } else {
+      // つまみが無い行でもこの列は空けておく。空けないと行ごとに升目の横位置がずれ、
+      // 多面体の行では升目のつもりで押した所がつまみになってしまう。
+      const sp = document.createElement('div'); sp.className = 'tw'; sp.textContent = '';
+      row.appendChild(sp);
+    }
+    if (opts.vis !== undefined) {
+      const vis = document.createElement('div');
+      vis.className = 'vis' + (opts.vis ? ' on' : '');
+      vis.onclick = e => { e.stopPropagation(); opts.onVis(); };
+      row.appendChild(vis);
+    } else {
+      const sp = document.createElement('div'); sp.style.width = '14px'; sp.style.flex = 'none';
+      row.appendChild(sp);
+    }
+    const sw = document.createElement('div');
+    sw.className = 'sw'; sw.style.background = opts.color;
+    const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = opts.name;
+    const kd = document.createElement('div'); kd.className = 'kd'; kd.textContent = opts.kind;
+    const vl = document.createElement('div'); vl.className = 'vl'; vl.textContent = opts.value;
+    row.append(sw, nm, kd, vl);
+    row.onclick = opts.onClick;
+    L.appendChild(row);
+  };
+  const objRow = (o, depth, twisty) => mkRow({
+    id: o.id, depth, twisty,
+    sel: st.sel.includes(o.id), bad: !o.ok,
+    vis: o.visible, onVis: () => {
+      o.visible = !o.visible;
+      // フォルダ（多面体）を消したら、取り出してある辺・面も一緒に消す
+      if (o.kind === K.POLY) for (const x of doc.objs) if (x.parent === o.id) x.visible = o.visible;
+      refresh();
+    },
+    color: o.ok ? o.color : '#999',
+    name: (o.builtin && LANG === 'en') ? (AXIS_EN[o.name] || o.name) : o.name,
+    kind: kindName(o.kind),
+    value: objValue(o),
+    onClick: () => chooseObject(o.id)
+  });
+
+  for (const o of doc.objs) {
+    if (o.parent) continue;                       // 子は親のフォルダの中で出す
+    if (o.kind !== K.POLY) { objRow(o, 0); continue; }
+
+    // 多面体はフォルダとして扱う。
+    // 取り出してある子だけ先に集めておけば、「選ばれている子があるか」も
+    // 「その面・辺の実体があるか」も、この一覧を見るだけで済む。
+    const kids = doc.objs.filter(x => x.parent === o.id);
+    const open = !!st.expanded[o.id] || kids.some(x => st.sel.includes(x.id));
+    objRow(o, 0, open);
+    if (!open) continue;
+    const vname = i => { const q = doc.get(o.args[i]); return q ? q.name : ('#' + (i + 1)); };
+
+    const ja = LANG === 'ja';
+    mkRow({ depth: 1, color: 'transparent', name: ja ? '面' : 'Faces', kind: o.topo.faces.length + (ja ? ' 枚' : ''), value: '', onClick: () => { } });
+    for (const f of o.topo.faces) {
+      const sub = { poly: o.id, type: 'face', verts: f.v.slice() };
+      const ex = kids.find(z => subMatches(z, sub));
+      const label = f.v.map(vname).join(' ');
+      if (ex) objRow(ex, 2);
+      else mkRow({
+        depth: 2, ghost: true, color: COL.plane,
+        name: f.v.length + (ja ? ' 角形' : '-gon'), kind: label, value: (ja ? '面積 ' : 'Area ') + f.area.toFixed(4),
+        onClick: () => { pushUndo(); const id = materializeSub(sub); st.expanded[o.id] = true; chooseObject(id); }
+      });
+    }
+    mkRow({ depth: 1, color: 'transparent', name: ja ? '辺' : 'Edges', kind: o.topo.edges.length + (ja ? ' 本' : ''), value: '', onClick: () => { } });
+    for (const e of o.topo.edges) {
+      const sub = { poly: o.id, type: 'edge', i: e.a, j: e.b };
+      const ex = kids.find(z => subMatches(z, sub));
+      const label = vname(e.a) + '–' + vname(e.b);
+      if (ex) objRow(ex, 2);
+      else mkRow({
+        depth: 2, ghost: true, color: COL.line,
+        name: label, kind: ja ? '辺' : 'Edge', value: (ja ? '長さ ' : 'Length ') + e.length.toFixed(4),
+        onClick: () => { pushUndo(); const id = materializeSub(sub); st.expanded[o.id] = true; chooseObject(id); }
+      });
+    }
+  }
+}
+let _optsBuilt = false, _optSync = [];
+function buildOpts() {
+  if (_optsBuilt) { for (const fn of _optSync) fn(); return; }
+  _optsBuilt = true; _optSync = [];
+  const o = document.getElementById('opts');
+  o.innerHTML = '';
+  const h = t => { const e = document.createElement('h3'); e.textContent = t; o.appendChild(e); };
+  const ck = (t, get, set) => {
+    const l = document.createElement('label'); l.className = 'ck';
+    const i = document.createElement('input'); i.type = 'checkbox'; i.checked = get();
+    i.onchange = () => { set(i.checked); refresh(); };
+    _optSync.push(() => { if (i.checked !== get()) i.checked = get(); });
+    l.append(i, document.createTextNode(t)); o.appendChild(l);
+  };
+  const sl = (t, get, set, min, max) => {
+    const d = document.createElement('div'); d.className = 'sl';
+    d.textContent = t + '  ' + get().toFixed(2);
+    const i = document.createElement('input');
+    i.type = 'range'; i.min = min; i.max = max; i.step = 0.01; i.value = get();
+    i.oninput = () => { set(parseFloat(i.value)); d.firstChild.textContent = t + '  ' + get().toFixed(2); draw(); };
+    d.appendChild(i); o.appendChild(d);
+  };
+  const grid = (pairs) => {
+    const g = document.createElement('div'); g.className = 'bgrid';
+    for (const [t, fn] of pairs) {
+      const b = document.createElement('button'); b.textContent = t; b.onclick = fn; g.appendChild(b);
+    }
+    o.appendChild(g);
+  };
+  const ja = LANG === 'ja';
+  const langBtn = document.createElement('button');
+  langBtn.className = 'wide'; langBtn.textContent = ja ? 'English' : '日本語';
+  langBtn.onclick = () => setLang(ja ? 'en' : 'ja');
+  o.appendChild(langBtn);
+  h(ja ? '表示' : 'Display');
+  ck(ja ? '座標平面の格子' : 'Grid', () => st.showGrid, v => st.showGrid = v);
+  ck(ja ? '座標軸' : 'Axes', () => st.showAxes, v => st.showAxes = v);
+  ck(ja ? 'ラベル' : 'Labels', () => st.showLabels, v => st.showLabels = v);
+  ck(ja ? 'ダークテーマ' : 'Dark theme', () => st.dark, v => { st.dark = v; document.body.classList.toggle('dark', v); });
+  sl(ja ? '平面の不透明度' : 'Plane opacity', () => st.planeAlpha, v => st.planeAlpha = v, 0, .6);
+  sl(ja ? '球の不透明度' : 'Sphere opacity', () => st.sphereAlpha, v => st.sphereAlpha = v, 0, .5);
+  sl(ja ? '立体の不透明度' : 'Solid opacity', () => st.solidAlpha, v => st.solidAlpha = v, 0, .7);
+  h(ja ? '操作' : 'Actions');
+  grid([
+    [ja ? '全体を表示' : 'Fit view', () => { fitView(); refresh(); }],
+    [ja ? '全消去' : 'Clear all', () => { pushUndo(); doc.clear(); doc.addAxes(); st.sel = []; say('全部消しました'); refresh(); }],
+    [ja ? '元に戻す' : 'Undo', () => { if (st.undo.length) { st.redo.push(JSON.stringify(doc.objs.map(x => ({ ...x, topo: null })))); restore(st.undo.pop()); refresh(); } }],
+    [ja ? 'やり直し' : 'Redo', () => { if (st.redo.length) { st.undo.push(JSON.stringify(doc.objs.map(x => ({ ...x, topo: null })))); restore(st.redo.pop()); refresh(); } }],
+    [ja ? '作図を保存' : 'Save drawing', saveScript],
+    [ja ? '作図を読込' : 'Load drawing', loadScript]
+  ]);
+  const b = document.createElement('button');
+  b.className = 'wide'; b.textContent = ja ? '画像 (PNG) を保存' : 'Save image (PNG)';
+  b.onclick = savePNG;
+  o.appendChild(b);
+}
+function refresh() { buildToolbar(); buildList(); buildOpts(); draw(); }
+
+// ------------------------------------------------------ 15. ファイル
+// 綴りは同じで、引数の型によって別の op に分かれるものは FN_TABLE に載っていない。
+// 書き出すときは元の綴りに戻す（読み直せば resolveOp が同じ op を選び直す）。
+function fnNameOf(op) {
+  if (op === OP.ANGLE_LL || op === OP.ANGLE_PP) return 'angle';
+  if (op === OP.PLANE_LP) return 'plane';
+  if (op === OP.SPHERE_CR || op === OP.SPHERE4) return 'sphere';
+  if (op === OP.PERPBIS_LINE) return 'perpbisector';
+  const fn = FN_TABLE.find(f => f[1] === op);
+  return fn ? fn[0] : null;
+}
+function scriptText() {
+  const out = ['# SolidGeo 作図ファイル'];
+  for (const o of doc.objs) {
+    if (o.builtin) continue;                   // 座標軸は読込側で用意する
+    if (o.op === OP.FREE || o.op === OP.XYZ) out.push(`${o.name} = (${o.a.x}, ${o.a.y}, ${o.a.z})`);
+    else if (o.op === OP.NUMBER) out.push(`${o.name} = ${o.r}`);
+    else if (o.op === OP.POLY_EDGE || o.op === OP.POLY_FACE) {
+      const h = doc.get(o.args[0]); if (!h) continue;
+      const fn = o.op === OP.POLY_EDGE ? 'edge' : 'face';
+      out.push(`${o.name} = ${fn}(${h.name}, ${o.idx.map(i => i + 1).join(', ')})`);
+    }
+    else if (o.op === OP.INTERSECT && o.variant > 0) {
+      const a0 = doc.get(o.args[0]), a1 = doc.get(o.args[1]);
+      if (!a0 || !a1) continue;
+      out.push(`${o.name} = intersect(${a0.name}, ${a1.name}, ${o.variant + 1})`);
+    }
+    else {
+      const fn = fnNameOf(o.op);
+      if (!fn) continue;
+      const args = o.args.map(a => { const q = doc.get(a); return q ? q.name : null; });
+      if (args.some(a => !a)) continue;
+      // 対象上の点は媒介変数で持っているので、居場所も書き添えて読込時に合わせ直す
+      const at = (o.op === OP.ON_OBJ && o.ok) ? ` @ ${o.a.x} ${o.a.y} ${o.a.z}` : '';
+      out.push(`${o.name} = ${fn}(${args.join(', ')})${at}`);
+    }
+  }
+  return out.join('\r\n');
+}
+function download(name, blob) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function saveScript() { download('zukei.txt', new Blob([scriptText()], { type: 'text/plain;charset=utf-8' })); }
+function loadScript() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.txt,text/plain';
+  inp.onchange = () => {
+    const f = inp.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => { loadText(rd.result); refresh(); };
+    rd.readAsText(f);
+  };
+  inp.click();
+}
+function loadText(text) {
+  pushUndo();
+  doc.clear(); doc.addAxes(); st.sel = [];
+  let ok = 0, ng = 0, first = '';
+  for (const raw of text.split(/\r?\n/)) {
+    let line = raw.trim();
+    if (!line || line[0] === '#') continue;
+    // 「対象上の点」の行には、どこに居たかが「… @ x y z」として付いている。
+    // 位置ではなく媒介変数で覚える対象なので、作ってから合わせ直す。
+    let where = '';
+    const at = line.lastIndexOf(' @ ');
+    if (at >= 0) { where = line.slice(at + 3); line = line.slice(0, at); }
+    const r = runCommand(doc, line);
+    if (!r.id) { ng++; if (!first) first = line + ' → ' + r.err; continue; }
+    ok++;
+    const c = where.split(/\s+/).map(Number);
+    if (c.length === 3 && c.every(v => isFinite(v))) {
+      const p = doc.get(r.id), h = p && p.args.length ? doc.get(p.args[0]) : null;
+      if (p && h) { pointOnSetFrom(h, p, V(c[0], c[1], c[2])); doc.recompute(); }
+    }
+  }
+  doc.recompute();
+  fitView();
+  say(`読み込みました（成功 ${ok} / 失敗 ${ng}）` + (first ? '　' + first : ''), ng > 0);
+  return { ok, ng };
+}
+function savePNG() { drawNow(); cv.toBlob(b => download('zukei.png', b)); }
+
+document.getElementById('bTools').onclick = () => document.getElementById('tools').classList.toggle('hide');
+document.getElementById('bPanel').onclick = () => document.getElementById('panel').classList.toggle('hide');
+
+// ------------------------------------------------------ 15. 多言語対応（日本語／English）
+// 対象データ・エラー文言・自己テストは常に日本語のまま保つ（挙動を変えないため）。
+// 表示だけを 2 段構えで切り替える：
+//   ・道具のラベルや見出しなど「静的な UI 文字」は LANG を見て直接組み立てる
+//   ・「○○ を作りました」のような動的なメッセージは、今までどおり日本語で
+//     st.msg に入れておき、画面に出す直前（renderMsg）にだけ英訳する
+// こうすると自己テストは LANG の値に関わらず今までどおり動く。
+let LANG = 'ja';
+try {
+  const saved = localStorage.getItem('sg_lang');
+  LANG = (saved === 'ja' || saved === 'en') ? saved
+    : ((navigator.language || '').toLowerCase().startsWith('ja') ? 'ja' : 'en');
+} catch (e) { LANG = (navigator.language || '').toLowerCase().startsWith('ja') ? 'ja' : 'en'; }
+
+// 対象の種類名（一覧の「種類」列）
+const KNAME_EN = {
+  point: 'Point', segment: 'Segment', line: 'Line', ray: 'Ray', triangle: 'Triangle',
+  plane: 'Plane', circle: 'Circle', sphere: 'Sphere', poly: 'Polyhedron', polygon: 'Polygon',
+  angle: 'Angle', number: 'Number', none: '—'
+};
+const KNAME_JA2EN = Object.fromEntries(Object.keys(KNAME).map(k => [KNAME[k], KNAME_EN[k]]));
+function kindName(k) { return LANG === 'ja' ? KNAME[k] : (KNAME_EN[k] || KNAME[k]); }
+
+// 道具のラベル・ヒント。TOOLS 本体の日本語は今までどおり canonical として使い、
+// 英語だけをここに持つ（抜けがあれば自己テストが検出する）。
+const TOOL_EN = {
+  move: { label: 'Move', hint: 'Click to select; drag a point to move it' },
+  point: { label: 'Point', hint: 'Click empty space for a free point, or an object for a point bound to it' },
+  intersect: { label: 'Intersect', hint: 'Select two objects that intersect' },
+  midpoint: { label: 'Midpoint', hint: 'Select two points, or a segment' },
+  segment: { label: 'Segment', hint: 'Select two points' },
+  line: { label: 'Line', hint: 'Select two points' },
+  ray: { label: 'Ray', hint: 'Select the endpoint, then a point it passes through' },
+  triangle: { label: 'Face (n-gon)', hint: 'Select 3 or more points, then press Enter or right-click to finish' },
+  plane3: { label: 'Plane', hint: 'Select 3 points, or a line and a point not on it' },
+  angle3: { label: 'Angle (3 points)', hint: 'Select 3 points (the middle one is the vertex)' },
+  angle2: { label: 'Angle (2 objects)', hint: 'Select 2 lines, or 2 planes' },
+  bisector: { label: 'Angle Bisector', hint: 'Select 3 points (the middle one is the vertex)' },
+  perp: { label: 'Perpendicular', hint: 'Select a point, then a line or plane' },
+  perpplane: { label: 'Perp. Plane', hint: 'Select a point, then a line' },
+  parallel: { label: 'Parallel Line', hint: 'Select a point, then a line' },
+  parplane: { label: 'Parallel Plane', hint: 'Select a point, then a plane' },
+  pbplane: { label: 'Perp. Bisector Plane', hint: 'Select two points, or a segment' },
+  pbline: { label: 'Perp. Bisector Line', hint: 'Select a segment (or 2 points), then the plane to place it in' },
+  foot: { label: 'Foot of Perpendicular', hint: 'Select a point, then a line or plane' },
+  tangent: { label: 'Tangent Plane', hint: 'Select a sphere, then a point on its surface' },
+  sphcp: { label: 'Sphere (center+pt)', hint: 'Select the center, then a point it passes through' },
+  sph4: { label: 'Sphere (4 points)', hint: 'Select 4 points' },
+  circle3: { label: 'Circle (3 points)', hint: 'Select 3 points' },
+  hull: { label: 'Convex Hull', hint: 'Select 4 or more points, then press Enter or right-click to finish' },
+  centroid: { label: 'Centroid', hint: 'Select a polyhedron' },
+  circum: { label: 'Circumsphere', hint: 'Select a polyhedron' },
+  insph: { label: 'Insphere', hint: 'Select a polyhedron' },
+  maxinsph: { label: 'Max Insphere', hint: 'Select a polyhedron' },
+  distance: { label: 'Distance', hint: 'Select two objects' },
+  area: { label: 'Area', hint: 'Select a face, circle, sphere, or polyhedron' },
+  volume: { label: 'Volume', hint: 'Select a polyhedron or sphere' },
+  center: { label: 'Center', hint: 'Select a circle or sphere' },
+  delete: { label: 'Delete', hint: 'Click the object you want to delete' }
+};
+function toolLabel(td) { return LANG === 'ja' ? td[1] : (TOOL_EN[td[0]] ? TOOL_EN[td[0]].label : td[1]); }
+function toolHint(td) { return LANG === 'ja' ? td[2] : (TOOL_EN[td[0]] ? TOOL_EN[td[0]].hint : td[2]); }
+
+// 座標軸は内部名を「x軸」などに統一してある（作図ファイルの互換のため）。
+// 英語で xAxis / x_axis と打っても同じ対象を指せるようにしておく
+// （識別子にハイフンは使えない言語仕様なので x-axis は対象外）。
+const AXIS_ALIAS = {
+  xaxis: 'x軸', x_axis: 'x軸',
+  yaxis: 'y軸', y_axis: 'y軸',
+  zaxis: 'z軸', z_axis: 'z軸'
+};
+const AXIS_EN = { 'x軸': 'X axis', 'y軸': 'Y axis', 'z軸': 'Z axis' };
+
+// 動的に組み立てるメッセージ（対象の名前や数を挟む）の英訳。
+// 完全一致で引けるものは EXACT_MAP、名前や数を挟むものは正規表現で。
+// どれにも当たらなければ日本語のまま出す（読めない英語より、そのほうが安全）。
+const EXACT_MAP = {
+  '3 点以上が必要です': 'At least 3 points are required',
+  'すべての点が一直線上にあります': 'All the points are collinear',
+  '同一平面上にありません': 'Not coplanar',
+  '3 点が一直線上にあります': 'The 3 points are collinear',
+  '点が直線上にあるため平面が定まりません': 'The point lies on the line, so the plane is not determined',
+  '2 平面は平行です': 'The two planes are parallel',
+  '角が 180° なので二等分線が定まりません': 'The angle is 180°, so the bisector is not determined',
+  '点が球面上にありません': 'The point is not on the sphere',
+  '点が直線上にあるため垂線は一意に定まりません（垂直平面をお使いください）':
+    'The point lies on the line, so the perpendicular is not unique (use Perpendicular Plane instead)',
+  '線分が平面に垂直なため定まりません': "The segment is perpendicular to the plane, so this isn't determined",
+  '4 点が同一平面上にあります': 'The 4 points are coplanar',
+  '4 点以上が必要です': 'At least 4 points are required',
+  'すべての点が同一平面上にあります（体積 0）': 'All the points are coplanar (volume 0)',
+  '多面体になりません': "This doesn't form a polyhedron",
+  '外接球は存在しません（全頂点が同一球面上にない）':
+    'No circumscribed sphere exists (the vertices are not concyclic on one sphere)',
+  '全面に接する内接球は存在しません（最大内接球をお使いください）':
+    'No sphere touches every face (use Max Insphere instead)',
+  '内接球が求まりません': "Couldn't find an inscribed sphere",
+  '座標が大きすぎるか、計算が不安定です': 'The coordinates are too large, or the calculation is unstable',
+  '角: 3 点、または 2 直線／2 平面を指定してください': 'Angle: specify 3 points, or 2 lines / 2 planes',
+  '平面: 3 点、または 直線と点 を指定してください': 'Plane: specify 3 points, or a line and a point',
+  '球: 中心と半径、中心と通る点、または 4 点を指定してください':
+    'Sphere: specify center+radius, center+point, or 4 points',
+  '垂線: 点と、直線または平面を指定してください': 'Perpendicular: specify a point, and a line or plane',
+  '入れ子が深すぎます': 'Nesting is too deep',
+  '式が空です': 'Empty expression',
+  '座標の数値が読めません': "Can't read the coordinate numbers",
+  '座標の数が大きすぎます': 'The coordinate value is too large',
+  '座標は (x, y, z) の形です': 'Coordinates must look like (x, y, z)',
+  '数が大きすぎます': 'The number is too large',
+  '読み取れない文字があります': 'There are unreadable characters',
+  '辺・面：多面体のあとに頂点番号を並べてください': 'Edge/Face: list vertex numbers after the polyhedron',
+  "')' がありません": "Missing ')'",
+  '解釈できません': "Couldn't parse this",
+  'この作図はできません': "This construction isn't possible",
+  '交わりません': "They don't intersect",
+  '対象をクリックしてください': 'Click an object',
+  '消したい対象を先にクリックして選んでください（座標軸は消せません）':
+    'Click the object you want to delete first (axes cannot be deleted)',
+  '全部消しました': 'Cleared everything',
+  '（作れません）': '(cannot be created)',
+  '面になりません': "This doesn't form a face",
+  '左の道具を選んで作図します。コマンド欄に打ち込むこともできます。':
+    'Pick a tool on the left to start drawing, or type a command in the box below.'
+};
+for (const td of TOOLS) if (TOOL_EN[td[0]]) { EXACT_MAP[td[1]] = TOOL_EN[td[0]].label; EXACT_MAP[td[2]] = TOOL_EN[td[0]].hint; }
+
+const TR_RULES = [
+  [/(.+?) を作りました（交わり）/g, (_, n) => `Created ${n} (intersection)`],
+  [/(.+?) を作りました（(.+?)）/g, (_, n, k) => `Created ${n} (${KNAME_JA2EN[k] || k})`],
+  [/(.+?) を作りました$/g, (_, n) => `Created ${n}`],
+  [/(.+?) を取り出しました（(.+?)）/g, (_, n, k) => `Extracted ${n} (${KNAME_JA2EN[k] || k})`],
+  [/(.+?) を総体として選びました/g, (_, n) => `Selected ${n} as a whole`],
+  [/(.+?) を動かしました (.+)/g, (_, n, v) => `Moved ${n} ${v}`],
+  [/(.+?) を削除しました/g, (_, n) => `Deleted ${n}`],
+  [/（これに依存していた (\d+) 個も一緒に消えました）/g, (_, n) => ` (also removed ${n} dependent object${n == 1 ? '' : 's'})`],
+  [/(\d+) 点以上を選んでください/g, (_, n) => `Select at least ${n} points`],
+  [/点を (\d+) 個選びました（Enter か右クリックで確定）/g, (_, n) => `Selected ${n} point${n == 1 ? '' : 's'} (press Enter or right-click to finish)`],
+  [/(.+?) は既にあります（重ねては作りません）/g, (_, n) => `${n} already exists here (won't create a duplicate)`],
+  [/(.+?) を隠しました（一覧の升目で戻せます）/g, (_, n) => `Hid ${n} (toggle its checkbox in the list to bring it back)`],
+  [/(.+?) の (\d+) 個の交点を作りました/g, (_, n, c) => `Created ${c} intersection points: ${n}`],
+  [/（(.+?) と重複するので作りませんでした）/g, (_, n) => ` (skipped — coincides with ${n})`],
+  [/交点は (.+?) と重複するので、新しい点は作りませんでした/g, (_, n) => `The intersection coincides with ${n}, so no new point was created`],
+  [/(.+?) と重複するので、新しい点は作りませんでした（\1 を選びました）/g, (_, n) => `${n} already exists there, so no new point was created (selected ${n} instead)`],
+  [/交点は (\d+) 個しかありません/g, (_, n) => `There are only ${n} intersection points`],
+  [/読み込みました（成功 (\d+) \/ 失敗 (\d+)）/g, (_, ok, ng) => `Loaded (${ok} ok / ${ng} failed)`],
+  [/知らない命令です: (.+)/g, (_, n) => `Unknown command: ${n}`],
+  [/(.+?) の引数が多すぎます/g, (_, n) => `Too many arguments for ${n}`],
+  [/(.+?) の引数の個数が違います/g, (_, n) => `Wrong number of arguments for ${n}`],
+  [/見つかりません: (.+)/g, (_, n) => `Not found: ${n}`],
+  [/名前が長すぎます（(\d+) 文字まで）/g, (_, n) => `Name is too long (max ${n} characters)`],
+  [/(.+?) は動かせません/g, (_, n) => `${n} can't be moved`],
+  [/(.+?) は点ではありません/g, (_, n) => `${n} isn't a point`],
+  [/(.+?) の乗っている対象がありません/g, (_, n) => `The object ${n} is attached to no longer exists`],
+  [/(.+?) は他の対象から決まる点なので動かせません/g, (_, n) => `${n} is determined by other objects, so it can't be moved`],
+  [/その名前は使われています: (.+)/g, (_, n) => `That name is already used: ${n}`]
+];
+// LANG が日本語なら何もしない（自己テストは常にこの経路を通らない＝挙動は今までどおり）
+function trJP(s) {
+  if (LANG !== 'en' || !s) return s;
+  if (EXACT_MAP[s] !== undefined) return EXACT_MAP[s];
+  let t = s;
+  for (const [re, rep] of TR_RULES) t = t.replace(re, rep);
+  return t;
+}
+
+function applyStaticText() {
+  document.title = LANG === 'ja' ? 'SolidGeo ― 立体幾何' : 'SolidGeo — Solid Geometry';
+  document.querySelector('#tools h2').textContent = LANG === 'ja' ? '道具' : 'Tools';
+  document.querySelector('#panel h2').textContent = LANG === 'ja' ? '対象一覧' : 'Objects';
+  document.getElementById('bTools').textContent = LANG === 'ja' ? '道具' : 'Tools';
+  document.getElementById('bPanel').textContent = LANG === 'ja' ? '一覧' : 'List';
+  document.getElementById('cmd').placeholder = LANG === 'ja'
+    ? 'コマンド欄：例  Midpoint(A,B) ／ 球(A,B) ／ Angle(A,B,C) ／ 凸包(A,B,C,D)'
+    : 'Command box — e.g. Midpoint(A,B) / Sphere(A,B) / Angle(A,B,C) / Hull(A,B,C,D)';
+}
+function setLang(l) {
+  if (l !== 'ja' && l !== 'en') return;
+  LANG = l;
+  try { localStorage.setItem('sg_lang', l); } catch (e) { /* プライベートモードなどでは諦める */ }
+  _toolBtns = null; _optsBuilt = false;   // ラベルが変わるので作り直す
+  applyStaticText();
+  refresh();
+}
+applyStaticText();
+
+// ------------------------------------------------------ 16. 自己テスト
+function runSelfTest() {
+  const R = [];
+  let fails = 0;
+  const chk = (n, ok) => { R.push((ok ? '[OK] ' : '[NG] ') + n); if (!ok) fails++; };
+  const num = (n, got, want, tol) => {
+    const ok = Math.abs(got - want) <= tol;
+    R.push((ok ? '[OK] ' : '[NG] ') + n + ' got=' + got.toFixed(12) + ' want=' + want.toFixed(12));
+    if (!ok) fails++;
+  };
+  const D = new Doc();
+  const run = s => runCommand(D, s);
+  const g = s => D.byName(s);
+
+  for (const s of ['A=(0,0,0)', 'B=(4,0,0)', 'C=(0,3,0)', 'D=(0,0,5)']) chk(s, run(s).id !== 0);
+  chk('中点', run('M=Midpoint(A,B)').id !== 0);
+  num('中点の x', g('M').a.x, 2, 1e-12);
+  chk('直線', run('a=Line(A,B)').id !== 0);
+  chk('平面', run('pl=Plane(A,B,C)').id !== 0);
+  num('平面の法線 z', Math.abs(g('pl').b.z), 1, 1e-12);
+  run('w1=Angle(B,A,C)'); num('∠BAC = 90°', degOf(g('w1').r), 90, 1e-9);
+  run('w2=Angle(A,B,C)'); num('∠ABC', degOf(g('w2').r), degOf(Math.atan2(3, 4)), 1e-9);
+  run('pl2=Plane(A,B,D)'); run('w3=Angle(pl,pl2)');
+  num('2 平面のなす角', degOf(g('w3').r), 90, 1e-9);
+  run('ln=Line(A,B)'); chk('直線と点から平面', run('plp=Plane(ln,C)').id !== 0);
+  num('その法線 z', Math.abs(g('plp').b.z), 1, 1e-12);
+  chk('直線上の点では平面を作らない', run('bad=Plane(ln,(2,0,0))').id === 0);
+  run('E=(2,2,7)'); run('pf=Foot(E,pl)');
+  num('平面への垂足 z', g('pf').a.z, 0, 1e-12);
+  run('pf2=Foot(E,a)'); num('直線への垂足 x', g('pf2').a.x, 2, 1e-12);
+  run('pb=PerpBisector(A,B)'); num('垂直二等分面の通る点', g('pb').a.x, 2, 1e-12);
+  run('sg=Segment(A,B)'); chk('線分から垂直二等分面', run('pbs=PerpBisector(sg)').id !== 0);
+  num('その通る点', g('pbs').a.x, 2, 1e-12);
+  run('s1=Sphere(A,B)'); num('球の半径', g('s1').r, 4, 1e-12);
+  run('s2=Sphere(A,B,C,D)'); num('4 点球の中心 x', g('s2').a.x, 2, 1e-9);
+  run('tp=TangentPlane(s1,B)'); num('接平面の法線 x', Math.abs(g('tp').b.x), 1, 1e-12);
+  run('c1=Circle(A,B,C)'); num('3 点円の半径', g('c1').r, 2.5, 1e-9);
+  run('x1=Intersect(a,pb)'); num('直線と平面の交点 x', g('x1').a.x, 2, 1e-12);
+  run('x2=Intersect(pl,pl2)'); chk('平面と平面の交線', g('x2').kind === K.LINE);
+  run('x3=Intersect(pl,s1)'); num('平面と球の交円の半径', g('x3').r, 4, 1e-9);
+
+  // n 角形の面
+  {
+    const E = new Doc();
+    for (const s of ['A=(0,0,0)', 'B=(2,0,0)', 'C=(2,2,0)', 'D=(0,2,0)']) runCommand(E, s);
+    const f = E.get(runCommand(E, 'f=polygon(A,B,C,D)').id);
+    chk('4 点から面が作れる', f && f.ok && f.kind === K.POLYGON);
+    if (f) { chk('4 角形になる', f.polyPts.length === 4); num('面積 = 4', f.r, 4, 1e-12); }
+    chk('3 点でも面が作れる', runCommand(E, 't=polygon(A,B,C)').id !== 0);
+    runCommand(E, 'Z=(0,2,1)');
+    const bad = runCommand(E, 'g=polygon(A,B,C,Z)');
+    chk('同一平面上にないと作らない', bad.id === 0);
+    chk('その理由が「同一平面上にありません」', bad.err === '同一平面上にありません');
+    for (const s of ['L1=(0,0,0)', 'L2=(1,0,0)', 'L3=(2,0,0)']) runCommand(E, s);
+    chk('一直線上でも作らない', runCommand(E, 'gg=polygon(L1,L2,L3)').id === 0);
+    runCommand(E, 'Q=(1,1,3)');
+    chk('面への垂線がひける', runCommand(E, 'pp=Perpendicular(Q,f)').id !== 0);
+    const ar = runCommand(E, 'ar=Area(f)');
+    if (ar.id) num('Area(n角形)', E.get(ar.id).r, 4, 1e-12);
+  }
+  // 多面体の面と辺
+  {
+    const E = new Doc();
+    const nm = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'];
+    let t = 0;
+    for (let i = 0; i < 2; i++)for (let j = 0; j < 2; j++)for (let k = 0; k < 2; k++)
+      runCommand(E, nm[t++] + '=(' + i + ',' + j + ',' + k + ')');
+    runCommand(E, 'h=Hull(P1,P2,P3,P4,P5,P6,P7,P8)');
+    const eo = E.get(runCommand(E, 'e1=edge(h,1,2)').id);
+    chk('辺を取り出せる', eo && eo.ok && eo.kind === K.SEGMENT);
+    if (eo) num('その辺の長さ', len(sub(eo.b, eo.a)), 1, 1e-12);
+    chk('辺の中点がとれる', runCommand(E, 'm1=Midpoint(e1)').id !== 0);
+    const fo = E.get(runCommand(E, 'f1=face(h,1,2,4,3)').id);
+    chk('面を取り出せる', fo && fo.ok && fo.kind === K.POLYGON);
+    if (fo) { chk('面は 4 角形', fo.polyPts.length === 4); num('面の面積', fo.r, 1, 1e-12); }
+    runCommand(E, 'Q=(0.5,0.5,3)');
+    chk('面への垂線がひける（多面体の面）', runCommand(E, 'pp=Perpendicular(Q,f1)').id !== 0);
+    chk('面への垂足がとれる', runCommand(E, 'pf=Foot(Q,f1)').id !== 0);
+    E.byName('P2').a = V(2, 0, 0);
+    E.recompute();
+    const eo2 = E.byName('e1');
+    chk('親を動かすと辺も伸びる', eo2 && eo2.ok && Math.abs(len(sub(eo2.b, eo2.a)) - 2) < 1e-9);
+  }
+  // 四面体
+  {
+    const E = new Doc();
+    for (const s of ['A=(0,0,0)', 'B=(1,0,0)', 'C=(0,1,0)', 'D=(0,0,1)', 'h=Hull(A,B,C,D)']) runCommand(E, s);
+    const h = E.byName('h');
+    num('四面体の体積', h.topo.vol, 1 / 6, 1e-12);
+    chk('F=4, E=6', h.topo.faces.length === 4 && h.topo.edges.length === 6);
+    runCommand(E, 'g1=Centroid(h)');
+    num('体積重心 x', E.byName('g1').a.x, .25, 1e-12);
+    runCommand(E, 'cs=Circumsphere(h)');
+    num('外接球の中心 x', E.byName('cs').a.x, .5, 1e-9);
+    runCommand(E, 'ins=Insphere(h)');
+    num('内接球の半径', E.byName('ins').r, 1 / (3 + Math.sqrt(3)), 1e-9);
+    runCommand(E, 'mi=MaxInsphere(h)');
+    num('最大内接球＝内接球', E.byName('mi').r, 1 / (3 + Math.sqrt(3)), 1e-9);
+  }
+  // 立方体と交わり
+  {
+    const E = new Doc();
+    const nm = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'];
+    let t = 0;
+    for (let i = 0; i < 2; i++)for (let j = 0; j < 2; j++)for (let k = 0; k < 2; k++)
+      runCommand(E, `${nm[t++]}=(${i},${j},${k})`);
+    runCommand(E, 'h=Hull(P1,P2,P3,P4,P5,P6,P7,P8)');
+    const h = E.byName('h');
+    num('立方体の体積', h.topo.vol, 1, 1e-12);
+    num('立方体の表面積', h.topo.surf, 6, 1e-12);
+    chk('F=6, E=12', h.topo.faces.length === 6 && h.topo.edges.length === 12);
+    runCommand(E, 'cs=Circumsphere(h)'); num('外接球半径 √3/2', E.byName('cs').r, Math.sqrt(3) / 2, 1e-9);
+    runCommand(E, 'ins=Insphere(h)'); num('内接球半径 1/2', E.byName('ins').r, .5, 1e-9);
+    runCommand(E, 'A9=(-1,-1,-1)'); runCommand(E, 'B9=(2,2,2)'); runCommand(E, 'l9=Line(A9,B9)');
+    const p1 = intersectPoints(E.byName('l9'), h);
+    chk('直線と立方体の交点は 2 個', p1.length === 2);
+    if (p1.length === 2) {
+      num('手前の交点', len(sub(p1[0], V(0, 0, 0))), 0, 1e-9);
+      num('奥の交点', len(sub(p1[1], V(1, 1, 1))), 0, 1e-9);
+    }
+    runCommand(E, 'C9=(0.2,0.2,0.2)'); runCommand(E, 'sg9=Segment(A9,C9)');
+    chk('線分では範囲外を拾わない', intersectPoints(E.byName('sg9'), h).length === 1);
+    runCommand(E, 'Q1=(1.1,0.5,0.5)'); runCommand(E, 'Q2=(0.2,1.019615,0.5)');
+    runCommand(E, 'Q3=(0.2,-0.019615,0.5)'); runCommand(E, 'c9=Circle(Q1,Q2,Q3)');
+    const p3 = intersectPoints(E.byName('c9'), h);
+    chk('円と立方体の交点は 8 個', p3.length === 8);
+    let onSurf = p3.length > 0;
+    for (const p of p3) {
+      const d = Math.min(Math.abs(p.x), Math.abs(p.x - 1), Math.abs(p.y), Math.abs(p.y - 1));
+      if (d > 1e-7) onSurf = false;
+      if (Math.abs(len(sub(p, V(.5, .5, .5))) - .6) > 1e-6) onSurf = false;
+    }
+    chk('どの交点も面上かつ円周上', onSurf);
+
+    // 多面体 x 球：接しているときだけ有限個の点（＝面ごとの接点）になる
+    const si = E.byName('ins');
+    const p4 = intersectPoints(h, si);
+    chk('立方体と内接球の交わりは 6 点', p4.length === 6);
+    let tang = p4.length > 0;
+    for (const p of p4) {
+      if (Math.abs(len(sub(p, V(.5, .5, .5))) - .5) > 1e-7) tang = false;
+      const d = Math.min(Math.abs(p.x), Math.abs(p.x - 1), Math.abs(p.y), Math.abs(p.y - 1),
+        Math.abs(p.z), Math.abs(p.z - 1));
+      if (d > 1e-7) tang = false;
+    }
+    chk('どの接点も球面上かつ面上', tang);
+    chk('順序を入れ替えても同じ', intersectPoints(si, h).length === 6);
+    runCommand(E, 'Z9=(0.5,0.5,0.5)'); runCommand(E, 'Z8=(0.5,0.5,1.05)');
+    runCommand(E, 'sb9=Sphere(Z9,Z8)');
+    const p6 = intersectPoints(h, E.byName('sb9'));
+    chk('面を切る球との交わりは点にならない', p6.length === 0 && p6.curved === true);
+    const rr = runCommand(E, 'xx9=Intersect(h,sb9)');
+    chk('その場合は理由を返す', rr.id === 0 && rr.err.indexOf('円弧') >= 0);
+  }
+  // 四面体の内接球：接点は 4 つ
+  {
+    const E = new Doc();
+    for (const s of ['A=(0,0,0)', 'B=(1,0,0)', 'C=(0,1,0)', 'D=(0,0,1)', 'h1=Hull(A,B,C,D)',
+      's1=Insphere(h1)', 's2=MaxInsphere(h1)']) runCommand(E, s);
+    const h1 = E.byName('h1'), s1 = E.byName('s1');
+    const pts = intersectPoints(h1, s1);
+    chk('四面体と内接球の交わりは 4 点', pts.length === 4);
+    let good = pts.length === 4;
+    for (const p of pts) if (Math.abs(len(sub(p, s1.a)) - s1.r) > 1e-7) good = false;
+    chk('4 点はどれも内接球の球面上', good);
+    chk('底面（z=0）にも接点がある', pts.some(p => Math.abs(p.z) < 1e-9));
+    chk('最大内接球でも 4 点', intersectPoints(h1, E.byName('s2')).length === 4);
+    // 外接球との交わりは頂点そのもの
+    runCommand(E, 'cs=Circumsphere(h1)');
+    const pv = intersectPoints(h1, E.byName('cs'));
+    chk('外接球との交わりは頂点 4 個', pv.length === 4);
+    chk('その 4 点は四面体の頂点そのもの',
+      pv.every(p => h1.polyPts.some(q => len(sub(p, q)) < 1e-7)));
+  }
+  // 球面上の 5 点（手で打った丸めのある座標）でも、頂点 5 個が出ること
+  {
+    const E = new Doc();
+    for (const s of ['O=(0,0,0)', 'R=(1,0,0)', 's=Sphere(O,R)',
+      'P1=(1,0,0)', 'P2=(-0.3,0.9539392,0)', 'P3=(-0.5,-0.5,0.7071068)',
+      'P4=(-0.5,-0.5,-0.7071068)', 'P5=(0.2,0.3,0.9327379)',
+      'h=Hull(P1,P2,P3,P4,P5)']) runCommand(E, s);
+    const pts = intersectPoints(E.byName('h'), E.byName('s'));
+    chk('球面上の 5 点：多面体と球の交わりは 5 点', pts.length === 5);
+    chk('5 点はどれも元の頂点',
+      pts.every(p => E.byName('h').polyPts.some(q => len(sub(p, q)) < 1e-6)));
+  }
+  // 外接球が存在しない場合
+  {
+    const E = new Doc();
+    for (const s of ['A=(0,0,0)', 'B=(1,0,0)', 'C=(0,1,0)', 'D=(0,0,1)', 'F=(2,2,2)', 'h=Hull(A,B,C,D,F)'])
+      runCommand(E, s);
+    chk('外接球が無ければ作らない', runCommand(E, 'cs=Circumsphere(h)').id === 0);
+    chk('最大内接球はそれでも求まる', runCommand(E, 'mi=MaxInsphere(h)').id !== 0);
+  }
+  // 依存関係
+  {
+    const E = new Doc();
+    runCommand(E, 'A=(0,0,0)');
+    const bid = runCommand(E, 'B=(2,0,0)').id;
+    const mid = runCommand(E, 'M=Midpoint(A,B)').id;
+    E.get(bid).a = V(10, 0, 0);
+    E.recompute();
+    num('親を動かすと子も動く', E.get(mid).a.x, 5, 1e-12);
+    E.remove(bid);
+    chk('親を消すと子も消える', E.get(mid) === null);
+  }
+  // 細工された作図ファイルでも壊れないこと
+  {
+    const E = new Doc();
+    E.addAxes();
+    for (const s of ['A=(0,0,0)', 'B=(1,0,0)', 'C=(0,1,0)', 'D=(0,0,1)', 'h=Hull(A,B,C,D)']) runCommand(E, s);
+    const deep = 'q=' + 'midpoint(A,'.repeat(4000) + 'B' + ')'.repeat(4000);
+    chk('深い入れ子は断る', runCommand(E, deep).id === 0);
+    chk('長すぎる名前は断る', runCommand(E, 'A'.repeat(500) + '=(1,2,3)').id === 0);
+    chk('引数が多すぎるものは断る', runCommand(E, 'hull(' + 'A,'.repeat(300) + 'B)').id === 0);
+    chk('範囲外の頂点番号は断る', runCommand(E, 'e1=edge(h,1,999)').id === 0);
+    chk('桁の大きすぎる頂点番号も断る', runCommand(E, 'e2=edge(h,1,1e300)').id === 0);
+    chk('桁の大きすぎる交点番号も断る', runCommand(E, 'x1=Intersect(x軸,y軸,1e300)').id === 0);
+    chk('閉じ括弧が無い行は断る', runCommand(E, 'm=midpoint(A,B').id === 0);
+    chk('途中で切れた座標は断る', runCommand(E, 'P=(1,2').id === 0);
+    chk('空の括弧は断る', runCommand(E, 'm=midpoint()').id === 0);
+    chk('桁あふれする座標は断る', runCommand(E, 'P=(1e400,0,0)').id === 0);
+    chk('桁あふれする数も断る', runCommand(E, 'nn=1e400').id === 0);
+    runCommand(E, 'Q1=(1e300,0,0)'); runCommand(E, 'Q2=(-1e300,1e300,0)');
+    const bad = runCommand(E, 'sp=Sphere(Q1,Q2)').id;
+    chk('計算が発散した対象は ok にしない', !bad || !E.get(bad).ok);
+    chk('残った対象はすべて有限の値', E.objs.every(x => !x.ok || finiteObj(x)));
+    chk('それでも作図は壊れていない', !!E.byName('h') && E.byName('h').ok);
+  }
+  // 既にある点に座標を書くと、その点が動くこと
+  {
+    const E = new Doc();
+    E.addAxes();
+    runCommand(E, 'A=(0,0,0)'); runCommand(E, 'B=(4,0,0)');
+    const mid = runCommand(E, 'M=Midpoint(A,B)').id;
+    const n0 = E.objs.length;
+    const r1 = runCommand(E, 'B=(10,0,0)');
+    chk('既にある点に座標を書ける', r1.id !== 0 && !r1.err && r1.moved === true);
+    chk('新しい対象は増えない', E.objs.length === n0);
+    num('その点が動く', E.byName('B').a.x, 10, 1e-12);
+    num('依存する対象も追従する', E.get(mid).a.x, 5, 1e-12);
+    const pid = runCommand(E, 'P=pointon(x軸)').id;
+    runCommand(E, 'P=(3.5,9,-4)');
+    const p = E.get(pid);
+    chk('軸上の点は軸から外れない',
+      Math.abs(p.a.x - 3.5) < 1e-12 && Math.abs(p.a.y) < 1e-12 && Math.abs(p.a.z) < 1e-12);
+    chk('他から決まる点は動かせない', runCommand(E, 'M=(1,1,1)').id === 0);
+    chk('座標軸は動かせない', runCommand(E, 'x軸=(1,1,1)').id === 0);
+    runCommand(E, 'sp=Sphere(A,B)');
+    chk('点でない対象も動かせない', runCommand(E, 'sp=(1,1,1)').id === 0);
+    chk('座標以外を書いたときは今までどおり名前の重複',
+      runCommand(E, 'B=Midpoint(A,M)').err.indexOf('使われています') >= 0);
+  }
+  // 座標軸
+  {
+    const E = new Doc();
+    E.addAxes();
+    chk('最初から x軸・y軸・z軸 がある', E.objs.length === 3);
+    const ax = E.byName('x軸'), ay = E.byName('y軸'), az = E.byName('z軸');
+    chk('どれも原点を通る直線', [ax, ay, az].every(o => o && o.kind === K.LINE && len(o.a) < 1e-12));
+    chk('向きが x, y, z',
+      len(sub(sub(ax.b, ax.a), V(1, 0, 0))) < 1e-12 &&
+      len(sub(sub(ay.b, ay.a), V(0, 1, 0))) < 1e-12 &&
+      len(sub(sub(az.b, az.a), V(0, 0, 1))) < 1e-12);
+    runCommand(E, 'A=(2,1,3)');
+    const l = E.get(runCommand(E, 'l=Parallel(A,z軸)').id);
+    chk('z軸に平行な直線が引ける', l && l.ok && len(sub(sub(l.b, l.a), V(0, 0, 1))) < 1e-12);
+    const pl = E.get(runCommand(E, 'pl=PerpendicularPlane(A,x軸)').id);
+    chk('x軸に垂直な平面が作れる', pl && pl.ok && len(cross(pl.b, V(1, 0, 0))) < 1e-12);
+    num('z軸までの距離 = √5', E.get(runCommand(E, 'n1=Distance(A,z軸)').id).r, Math.sqrt(5), 1e-12);
+    num('x軸とy軸のなす角 = 90°', E.get(runCommand(E, 'w1=Angle(x軸,y軸)').id).r, PI / 2, 1e-12);
+    const P = E.get(runCommand(E, 'P=pointon(x軸)').id);
+    chk('軸上の点が作れる', P && P.ok && P.op === OP.ON_OBJ);
+    pointOnSetFrom(ax, P, V(3.5, 9, -4));            // 軸から離れた所を指しても
+    E.recompute();
+    chk('軸上に留まる', Math.abs(P.a.x - 3.5) < 1e-12 && Math.abs(P.a.y) < 1e-12 && Math.abs(P.a.z) < 1e-12);
+    const n0 = E.objs.length;
+    E.remove(ax.id);
+    chk('座標軸は消せない', E.objs.length === n0);
+  }
+  // 道具で作った点が、既にある点と重なるときの振る舞い（札の重なり防止）。
+  // ここだけは本物の作図（global の doc）を使うので、終わったら元に戻す。
+  {
+    const saved = scriptText(), savedTool = st.tool;
+    const setup = lines => { loadText(lines.join('\n')); st.msg = ''; };
+    const apply = (tool, names) => {
+      st.tool = tool;
+      st.sel = names.map(n => doc.byName(n).id);
+      applyTool();
+    };
+    setup(['A=(0,0,0)', 'B=(2,0,0)', 'C=(1,2,0)', 'D=(1,1,2)', 'h=Hull(A,B,C,D)', 'cs=Circumsphere(h)']);
+    let n0 = doc.objs.length;
+    apply('intersect', ['h', 'cs']);
+    chk('外接球との交点は作らない', doc.objs.length === n0);
+    chk('どの点と重複したかを伝える', st.msg.indexOf('重複') >= 0 && st.msg.indexOf('A, B, C, D') >= 0);
+
+    setup(['O=(0,0,0)', 'Z=(0,0,1)', 's=Sphere(O,Z)', 'A=(1,0,0)', 'B=(0,0.2,0.1)', 'l=Line(A,B)']);
+    n0 = doc.objs.length;
+    apply('intersect', ['l', 's']);
+    chk('重複しない側だけを作る', doc.objs.length === n0 + 1);
+    chk('重複した点の名前を伝える', st.msg.indexOf('A と重複') >= 0);
+
+    setup(['A=(0,0,0)', 'B=(2,0,0)', 'C=(1,2,0)', 'D=(1,1,2)', 'h=Hull(A,B,C,D)', 'si=Insphere(h)']);
+    n0 = doc.objs.length;
+    apply('intersect', ['h', 'si']);
+    chk('重ならない交点はそのまま作る', doc.objs.length === n0 + 4);
+
+    setup(['A=(0,0,0)', 'B=(2,0,0)', 'M=(1,0,0)']);
+    n0 = doc.objs.length;
+    apply('midpoint', ['A', 'B']);
+    chk('中点が重なるときも作らない', doc.objs.length === n0);
+    chk('重なった点を選んでおく',
+      st.sel.length === 1 && doc.get(st.sel[0]) && doc.get(st.sel[0]).name === 'M');
+
+    // 保存 → 読込 でどの作図も戻ってくること（綴りが引数の型で分かれるものが落ちやすい）
+    setup(['A=(0,0,0)', 'B=(3,0,0)', 'C=(0,4,0)', 'D=(1,1,5)',
+      'l1=Line(A,B)', 'l2=Line(A,C)', 'w1=Angle(l1,l2)',
+      'p1=Plane(A,B,C)', 'p2=Plane(A,B,D)', 'w2=Angle(p1,p2)', 'p3=Plane(l1,D)',
+      's1=Sphere(A,2)', 's2=Sphere(A,B,C,D)', 'm1=PerpBisector(A,B,p1)',
+      'g1=Polygon(A,B,C)', 'P1=pointon(l1)']);
+    pointOnSetFrom(doc.byName('l1'), doc.byName('P1'), V(2.25, 0, 0));
+    doc.recompute();
+    const before = doc.objs.map(o => [o.name, o.kind, o.ok, o.a.x, o.a.y, o.a.z, o.r]);
+    loadText(scriptText());
+    const after = doc.objs.map(o => [o.name, o.kind, o.ok, o.a.x, o.a.y, o.a.z, o.r]);
+    chk('保存して読み直すと対象の数が同じ', before.length === after.length);
+    chk('名前・種類・値もそのまま戻る', JSON.stringify(before) === JSON.stringify(after));
+    chk('座標軸は二重にならない', doc.objs.filter(o => o.op === OP.AXIS).length === 3);
+
+    loadText(saved); st.tool = savedTool; st.sel = []; st.msg = '';
+  }
+  // 多言語対応：LANG の値に関わらず内部状態（st.msg・自己テスト）は日本語のまま、
+  // 訳語の抜けがなく、英語表記の軸名でも同じ対象を指せることを確かめる
+  {
+    const savedLang = LANG;
+    LANG = 'en';
+    const savedMsg = st.msg, savedErr = st.msgErr;
+    say('交わりません', true);
+    chk('LANG=en でも say() は日本語のまま st.msg に入れる（自己テストとの独立性）', st.msg === '交わりません');
+    st.msg = savedMsg; st.msgErr = savedErr;
+
+    chk('LANG=en：完全一致の訳がある', trJP('交わりません') === "They don't intersect");
+    chk('LANG=en：動的なメッセージも訳す', trJP('A を作りました（点）') === 'Created A (Point)');
+    chk('辞書に無い文はそのまま返す（表示が欠けない）', trJP('これは辞書に無い文です') === 'これは辞書に無い文です');
+    LANG = 'ja';
+    chk('LANG=ja では trJP は素通し', trJP('交わりません') === '交わりません');
+    LANG = savedLang;
+
+    let allK = true;
+    for (const k of Object.keys(KNAME)) if (!(k in KNAME_EN)) allK = false;
+    chk('すべての種類に英語名がある', allK);
+    let allT = true;
+    for (const td of TOOLS) if (!TOOL_EN[td[0]]) allT = false;
+    chk('すべての道具に英語のラベル・ヒントがある', allT);
+
+    const E = new Doc(); E.addAxes();
+    const p1 = runCommand(E, 'P1=pointon(x軸)'), p2 = runCommand(E, 'P2=pointon(xAxis)'), p3 = runCommand(E, 'P3=pointon(x_axis)');
+    chk('英語表記の軸名 xAxis でも同じ対象を指せる',
+      p1.id !== 0 && p2.id !== 0 && E.get(p2.id).args[0] === E.get(p1.id).args[0]);
+    chk('英語表記の軸名 x_axis でも同じ対象を指せる',
+      p3.id !== 0 && E.get(p3.id).args[0] === E.get(p1.id).args[0]);
+  }
+  R.push(fails === 0 ? '結果: 全項目 合格（NG 0 件）' : `結果: 不合格あり（NG ${fails} 件）`);
+  return { fails, text: R.join('\n') };
+}
+
+// 外から検証できるように公開しておく
+window.SG = {
+  doc, cam, st, runCommand, intersectPoints, intersectObjs, convexHull,
+  runSelfTest, loadText, scriptText, refresh, draw, drawNow, fitView, T, TOOLS,
+  toolClick, pickedForTool, pickObject, applyTool, deleteObjects, V, len, sub,
+  materializeSub, findSub, sameSub, K, OP, Doc, makePolygon, objFacePlane,
+  getLang: () => LANG, setLang, trJP, kindName, toolLabel, toolHint, KNAME_EN, TOOL_EN
+};
+
+// ------------------------------------------------------------ 起動
+window.addEventListener('resize', resize);
+new ResizeObserver(resize).observe(document.getElementById('view'));
+if ((navigator.hardwareConcurrency || 4) < 4) st.lowSpec = true;
+doc.addAxes();
+say('左の道具を選んで作図します。コマンド欄に打ち込むこともできます。');
+refresh();
+resize();
+requestAnimationFrame(resize);   // 最初の割りつけが決まってからもう一度合わせる
+if (location.hash === '#selftest') {
+  const r = runSelfTest();
+  document.title = (r.fails === 0 ? 'PASS' : 'FAIL ' + r.fails) + ' — SolidGeo';
+  console.log(r.text);
+}
+</script>

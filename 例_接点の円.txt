@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────────────────────
+#  内接球の接点がつくる円
+#  四面体 ABCD の内接球が、頂点 A を含む 3 つの面に接する点 P, Q, R。
+#  この 3 点を通る円 kk の中心 M は、線分 AI 上に乗る。
+# ─────────────────────────────────────────────────────────────
+A=(0,0,0)
+B=(5,0,0)
+C=(1,4,0)
+D=(2,1,6)
+h=Hull(A,B,C,D)
+si=Insphere(h)
+I=center(si)
+fabc=Plane(A,B,C)
+fabd=Plane(A,B,D)
+facd=Plane(A,C,D)
+P=Foot(I,fabc)
+Q=Foot(I,fabd)
+R=Foot(I,facd)
+kk=Circle(P,Q,R)
+M=center(kk)
+ai=Line(A,I)
+# ---- 確かめ ----
+vr=radius(si)
+vd=Distance(A,I)
+vt=Distance(A,P)
+vrho=radius(kk)
+vMonAI=Distance(M,ai)
+vIM=Distance(I,M)
+vAP=Distance(A,P)
+vAQ=Distance(A,Q)
+vAR=Distance(A,R)
