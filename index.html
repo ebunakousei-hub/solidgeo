@@ -2337,7 +2337,9 @@ window.addEventListener('mousemove', ev => {
       doc.recompute();
     }
   } else if (st.orbiting) {
-    cam.yaw += (p.x - st.lastX) * .008; cam.pitch += (p.y - st.lastY) * .008;
+    // 左右の回転は「図をつかんで回す」向き（右へ引けば図も右へ回る）。
+    // 上下の回転も平行移動も同じ向きなので、三つの操作で流儀が揃う。
+    cam.yaw -= (p.x - st.lastX) * .008; cam.pitch += (p.y - st.lastY) * .008;
   } else if (st.panning) {
     const k = cam.dist * .0016;
     cam.target = add(sub(cam.target, mul(cam.right, (p.x - st.lastX) * k)), mul(cam.up, (p.y - st.lastY) * k));
