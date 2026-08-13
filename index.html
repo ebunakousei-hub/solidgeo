@@ -382,12 +382,14 @@ function maxInsphere(p, T) {
 const K = {
   NONE: 'none', POINT: 'point', SEGMENT: 'segment', LINE: 'line', RAY: 'ray',
   TRIANGLE: 'triangle', PLANE: 'plane', CIRCLE: 'circle', SPHERE: 'sphere',
-  POLY: 'poly', POLYGON: 'polygon', ANGLE: 'angle', NUMBER: 'number'
+  POLY: 'poly', POLYGON: 'polygon', ANGLE: 'angle', NUMBER: 'number',
+  POINT4: 'point4', HYPER: 'hyper', HSPHERE: 'hsphere'   // 四次元：点・多胞体・超球
 };
 const KNAME = {
   point: '点', segment: '線分', line: '直線', ray: '半直線', triangle: '三角形',
   plane: '平面', circle: '円', sphere: '球', poly: '多面体', polygon: '多角形',
-  angle: '角', number: '数値', none: '—'
+  angle: '角', number: '数値', none: '—',
+  point4: '4D点', hyper: '多胞体', hsphere: '超球'
 };
 const OP = {
   FREE: 'free', ON_OBJ: 'onobj', XYZ: 'xyz', MIDPOINT: 'midpoint', SEGMENT: 'segment',
@@ -401,11 +403,384 @@ const OP = {
   CENTROID_V: 'cenV', CENTROID_S: 'cenS', CENTROID_VOL: 'cenVol',
   CIRCUMSPHERE: 'circum', INSPHERE: 'insph', MAXINSPHERE: 'maxinsph',
   DISTANCE: 'dist', LENGTH: 'length', AREA: 'area', VOLUME: 'volume',
-  RADIUS: 'radius', NUMBER: 'number', AXIS: 'axis', CENTER: 'center'
+  RADIUS: 'radius', NUMBER: 'number', AXIS: 'axis', CENTER: 'center',
+  XYZW: 'xyzw', HULL4: 'hull4', HSPHERE: 'hsphere'       // 四次元：点・凸包・超球
 };
+
+// ------------------------------------------------------------ 6.5 四次元の演算核
+// C++ 版 geo4.h の移植。超立体は使用者が座標明示した 4D 点の集まりで与える。
+//  ・重い計算（4D 凸包：胞→面→辺）は点が変わった時だけ（点集合のハッシュで見張る）
+//  ・毎フレームは「回す・落とす・胞ごとの断面多角形」だけ（辺の本数に比例）
+const v4 = (x, y, z, w) => ({ x, y, z, w });
+const add4 = (a, b) => v4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
+const sub4 = (a, b) => v4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w);
+const mul4 = (a, s) => v4(a.x * s, a.y * s, a.z * s, a.w * s);
+const dot4 = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+const len4 = a => Math.sqrt(dot4(a, a));
+
+// 1 点を回す（xy → xz → xw → yz → yw → zw の順に平面回転）
+const D4_PL = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
+function d4rot(vw, p) {
+  const v = [p.x, p.y, p.z, p.w];
+  for (let k = 0; k < 6; k++) {
+    const a = vw.ang[k];
+    if (!a) continue;
+    const c = Math.cos(a), sn = Math.sin(a);
+    const [i, j] = D4_PL[k];
+    const u = v[i], t = v[j];
+    v[i] = u * c - t * sn;
+    v[j] = u * sn + t * c;
+  }
+  return v4(v[0], v[1], v[2], v[3]);
+}
+// 回した点を 3 次元へ落とす。透視は w = dist に目を置く（分母には下限の保険）
+function d4place(vw, p) {
+  if (!vw.persp) return V(p.x, p.y, p.z);
+  let den = vw.dist - p.w;
+  if (den < 0.25) den = 0.25;
+  const k = vw.dist / den;
+  return V(p.x * k, p.y * k, p.z * k);
+}
+function d4RotAll(o, vw) {
+  const out = [];
+  for (let i = 0; i < o.polyPts.length; i++)
+    out.push(d4rot(vw, v4(o.polyPts[i].x, o.polyPts[i].y, o.polyPts[i].z, o.pw[i])));
+  return out;
+}
+// u1, u2, u3 に直交するベクトル（4 次元の「外積」）
+function cross4(u1, u2, u3) {
+  const d3 = (a, b, c) => dot(a, cross(b, c));
+  return v4(
+    d3(V(u1.y, u1.z, u1.w), V(u2.y, u2.z, u2.w), V(u3.y, u3.z, u3.w)),
+    -d3(V(u1.x, u1.z, u1.w), V(u2.x, u2.z, u2.w), V(u3.x, u3.z, u3.w)),
+    d3(V(u1.x, u1.y, u1.w), V(u2.x, u2.y, u2.w), V(u3.x, u3.y, u3.w)),
+    -d3(V(u1.x, u1.y, u1.z), V(u2.x, u2.y, u2.z), V(u3.x, u3.y, u3.z)));
+}
+let g_d4HullBuilds = 0;                     // 自己診断用：重い再計算が何回走ったか
+function d4Hash(pts, ws) {
+  const a = [];
+  for (let i = 0; i < pts.length; i++) a.push(pts[i].x, pts[i].y, pts[i].z, ws[i]);
+  return a.join(',');                       // 倍精度の文字列表現は完全一致でだけ等しい
+}
+// o.polyPts / o.pw から、辺 e4・胞 cell4/ce4・数 f4/c4 を作る（失敗は o.note に日本語）
+function d4BuildHull(o) {
+  g_d4HullBuilds++;
+  o.e4 = []; o.cell4 = []; o.ce4 = []; o.f4 = 0; o.c4 = 0;
+  const n = o.polyPts.length;
+  if (n < 5) { o.note = '四次元の立体には、点が 5 個以上必要です'; return false; }
+  if (n > 64) { o.note = '点が多すぎます（四次元の凸包は 64 個まで。総当たりの予算です）'; return false; }
+  const p = [];
+  let mx = 1;
+  for (let i = 0; i < n; i++) {
+    p.push(v4(o.polyPts[i].x, o.polyPts[i].y, o.polyPts[i].z, o.pw[i]));
+    mx = Math.max(mx, Math.abs(p[i].x), Math.abs(p[i].y), Math.abs(p[i].z), Math.abs(p[i].w));
+  }
+  const eps = 1e-6 * mx * 8;                // 手打ちの小数でも壊れない許差
+  // 同じ場所の点は 1 つにまとめる
+  const uid = new Array(n).fill(-1), q = [];
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < q.length; k++) if (len4(sub4(q[k], p[i])) <= eps) { uid[i] = k; break; }
+    if (uid[i] < 0) { uid[i] = q.length; q.push(p[i]); }
+  }
+  const m = q.length;
+  if (m < 5) { o.note = '重なりを除くと点が 5 個未満です'; return false; }
+  // 4 次元的に広がっているか（グラム・シュミット）
+  {
+    const basis = [];
+    for (let i = 1; i < m && basis.length < 4; i++) {
+      let v = sub4(q[i], q[0]);
+      for (const b of basis) v = sub4(v, mul4(b, dot4(v, b)));
+      if (len4(v) > eps) basis.push(mul4(v, 1 / len4(v)));
+    }
+    if (basis.length < 4) {
+      o.note = '点が 4 次元的に広がっていません（w がすべて同じ、など）。' +
+        '3 次元に収まる形は、従来の凸包（hull）をお使いください。';
+      return false;
+    }
+  }
+  // 胞（支持超平面）の列挙：4 点組の総当たり
+  const cells = [], cellKeys = new Set();
+  const d = new Array(m);
+  for (let i = 0; i < m; i++) for (let j = i + 1; j < m; j++)
+    for (let k = j + 1; k < m; k++) for (let l = k + 1; l < m; l++) {
+      const nrm = cross4(sub4(q[j], q[i]), sub4(q[k], q[i]), sub4(q[l], q[i]));
+      const nl = len4(nrm);
+      if (nl <= eps * eps) continue;
+      let pos = 0, neg = 0;
+      for (let t = 0; t < m; t++) {
+        d[t] = dot4(nrm, sub4(q[t], q[i])) / nl;
+        if (d[t] > eps) pos++; else if (d[t] < -eps) neg++;
+      }
+      if (pos > 0 && neg > 0) continue;
+      const S = [];
+      for (let t = 0; t < m; t++) if (Math.abs(d[t]) <= eps) S.push(t);
+      if (S.length < 4) continue;
+      const key = S.join(',');
+      if (cellKeys.has(key)) continue;
+      cellKeys.add(key);
+      cells.push(S);
+    }
+  if (!cells.length) { o.note = '四次元の凸包が作れませんでした（点の与え方をご確認ください）'; return false; }
+  // 各胞：超平面に基底を張って 3 次元へ落とし、既存の凸包で面と辺を得る
+  const edgeSet = new Map();
+  let faceSum = 0;
+  for (const S of cells) {
+    let c0 = v4(0, 0, 0, 0);
+    for (const v of S) c0 = add4(c0, q[v]);
+    c0 = mul4(c0, 1 / S.length);
+    const basis = [];
+    for (const v of S) {
+      let u = sub4(q[v], c0);
+      for (const b of basis) u = sub4(u, mul4(b, dot4(u, b)));
+      if (len4(u) > eps && basis.length < 3) basis.push(mul4(u, 1 / len4(u)));
+    }
+    if (basis.length < 3) { o.note = '胞の形が退化しています'; return false; }
+    const local = S.map(v => V(dot4(sub4(q[v], c0), basis[0]),
+      dot4(sub4(q[v], c0), basis[1]), dot4(sub4(q[v], c0), basis[2])));
+    const T = convexHull(local, eps);
+    if (!T.ok) { o.note = '胞の凸包が作れませんでした'; return false; }
+    faceSum += T.faces.length;
+    const ce = [];
+    for (const E of T.edges) {
+      let a = S[E.a], b = S[E.b];
+      if (a > b) { const t = a; a = b; b = t; }
+      ce.push(a, b);
+      edgeSet.set(a + ',' + b, [a, b]);
+    }
+    o.cell4.push(S);
+    o.ce4.push(ce);
+  }
+  for (const [, e] of edgeSet) o.e4.push(e[0], e[1]);
+  o.c4 = cells.length;
+  o.f4 = faceSum / 2;                       // 面はちょうど 2 つの胞に共有される
+  if (m !== n) {                            // まとめた点の番号で回るので詰め直す
+    const np = new Array(m), nw = new Array(m);
+    for (let i = 0; i < n; i++) { np[uid[i]] = o.polyPts[i]; nw[uid[i]] = o.pw[i]; }
+    o.polyPts = np; o.pw = nw;
+  }
+  return true;
+}
+// 断面（毎フレーム走る軽い計算）：胞ごとに「胞 ∩ { w = t } ＝ 凸多角形」を直接作る
+function d4Section(o, rp, t) {
+  const out = { pt: [], face: [] };
+  const n = rp.length;
+  if (!n || !o.e4.length) return out;
+  let mx = 1;
+  for (const p of rp) mx = Math.max(mx, Math.abs(p.x), Math.abs(p.y), Math.abs(p.z), Math.abs(p.w));
+  const eps = 1e-9 * (mx + Math.abs(t) + 1) * 16;
+  const vIdx = new Array(n).fill(-1);
+  for (let i = 0; i < n; i++)
+    if (Math.abs(rp[i].w - t) <= eps) { vIdx[i] = out.pt.length; out.pt.push(V(rp[i].x, rp[i].y, rp[i].z)); }
+  const nE = o.e4.length / 2;
+  const eIdx = new Array(nE).fill(-1);
+  const eKey = new Map();
+  for (let e = 0; e < nE; e++) {
+    const a = o.e4[e * 2], b = o.e4[e * 2 + 1];
+    eKey.set(a + ',' + b, e);
+    const wa = rp[a].w - t, wb = rp[b].w - t;
+    if (Math.abs(wa) <= eps || Math.abs(wb) <= eps) continue;   // 端は頂点扱い
+    if ((wa > 0) === (wb > 0)) continue;
+    const s2 = wa / (wa - wb);
+    const X = add4(rp[a], mul4(sub4(rp[b], rp[a]), s2));
+    eIdx[e] = out.pt.length;
+    out.pt.push(V(X.x, X.y, X.z));
+  }
+  if (!out.pt.length) return out;
+  const seen = new Set();
+  for (let ci = 0; ci < o.cell4.length; ci++) {
+    let ids = [];
+    let onCnt = 0;
+    for (const v of o.cell4[ci]) if (vIdx[v] >= 0) { ids.push(vIdx[v]); onCnt++; }
+    const ce = o.ce4[ci];
+    for (let k = 0; k + 1 < ce.length; k += 2) {
+      const e = eKey.get(ce[k] + ',' + ce[k + 1]);
+      if (e !== undefined && eIdx[e] >= 0) ids.push(eIdx[e]);
+    }
+    ids = [...new Set(ids)];
+    if (ids.length < 3) continue;
+    // 胞が丸ごと超平面上（断面＝その胞そのもの）
+    if (onCnt >= 4 && ids.length === onCnt) {
+      const pts = ids.map(id => out.pt[id]);
+      const T = convexHull(pts, eps * 8);
+      if (T.ok && !T.coplanar) {
+        for (const f of T.faces) {
+          const fc = f.v.map(v => ids[v]);
+          const key = [...fc].sort((a, b) => a - b).join(',');
+          if (!seen.has(key)) { seen.add(key); out.face.push(fc); }
+        }
+        continue;
+      }
+    }
+    // ふつうの胞：平面凸多角形。Newell 法線＋重心まわりの角度で並べる
+    let c = V(0, 0, 0);
+    for (const id of ids) c = add(c, out.pt[id]);
+    c = mul(c, 1 / ids.length);
+    let nrm = V(0, 0, 0);
+    for (let k = 0; k < ids.length; k++) {
+      const u = sub(out.pt[ids[k]], c), v = sub(out.pt[ids[(k + 1) % ids.length]], c);
+      nrm = add(nrm, cross(u, v));
+    }
+    if (len(nrm) < 1e-15) nrm = V(0, 0, 1);
+    nrm = norm(nrm);
+    const u0 = norm(sub(sub(out.pt[ids[0]], c), mul(nrm, dot(sub(out.pt[ids[0]], c), nrm))));
+    const v0 = cross(nrm, u0);
+    ids.sort((A, B) => {
+      const pa = sub(out.pt[A], c), pb = sub(out.pt[B], c);
+      return Math.atan2(dot(pa, v0), dot(pa, u0)) - Math.atan2(dot(pb, v0), dot(pb, u0));
+    });
+    const key = [...ids].sort((a, b) => a - b).join(',');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.face.push(ids);
+  }
+  return out;
+}
+// 見えている 4D 対象の（回した後の）w の範囲
+function d4TRange(D, vw) {
+  let lo = 1e18, hi = -1e18;
+  for (const o of D.objs) {
+    if (!o.ok || !o.visible) continue;
+    if (o.kind === K.HYPER) {
+      for (const p of d4RotAll(o, vw)) { lo = Math.min(lo, p.w); hi = Math.max(hi, p.w); }
+    } else if (o.kind === K.HSPHERE) {
+      const c4 = d4rot(vw, v4(o.a.x, o.a.y, o.a.z, o.b.x));
+      lo = Math.min(lo, c4.w - o.r); hi = Math.max(hi, c4.w + o.r);
+    }
+  }
+  if (lo > hi) { lo = -2; hi = 2; }
+  return [lo, hi];
+}
+function anyD4Visible() {
+  return doc.objs.some(o => o.ok && o.visible &&
+    (o.kind === K.POINT4 || o.kind === K.HYPER || o.kind === K.HSPHERE));
+}
+function d4PointPos(o) { return d4place(st.d4, d4rot(st.d4, v4(o.a.x, o.a.y, o.a.z, o.r))); }
+
+// ---- 見本（コマンド列を作る。座標がそのまま見え、編集も保存もできる）----
+function d4Fmt(v) {
+  let s2 = v.toFixed(6);
+  s2 = s2.replace(/0+$/, '').replace(/\.$/, '');
+  return s2 === '-0' ? '0' : s2;
+}
+function d4Tuple(p) { return `(${d4Fmt(p.x)}, ${d4Fmt(p.y)}, ${d4Fmt(p.z)}, ${d4Fmt(p.w)})`; }
+const D4_PRESETS = [
+  ['正五胞体（4 次元の三角錐）', '5-cell (4D simplex)'],
+  ['正八胞体（テッセラクト）', '8-cell (tesseract)'],
+  ['正十六胞体', '16-cell'],
+  ['正二十四胞体', '24-cell'],
+  ['六角二重柱（デュオプリズム）', 'Hexagonal duoprism'],
+  ['超球（グローム）', 'Hypersphere (glome)']
+];
+function d4PresetCount() { return D4_PRESETS.length; }
+function d4PresetName(i) { return LANG === 'ja' ? D4_PRESETS[i][0] : D4_PRESETS[i][1]; }
+function d4PresetPts(i) {
+  const v = [];
+  if (i === 0) {
+    const a = 1.5, r5 = Math.sqrt(5);
+    v.push(v4(a, a, a, -a / r5), v4(a, -a, -a, -a / r5), v4(-a, a, -a, -a / r5),
+      v4(-a, -a, a, -a / r5), v4(0, 0, 0, a * 4 / r5 - a / r5));
+  } else if (i === 1) {
+    const a = 1.5;
+    for (let m2 = 0; m2 < 16; m2++)
+      v.push(v4(m2 & 1 ? a : -a, m2 & 2 ? a : -a, m2 & 4 ? a : -a, m2 & 8 ? a : -a));
+  } else if (i === 2) {
+    const a = 2;
+    for (let k = 0; k < 4; k++) for (let s2 = -1; s2 <= 1; s2 += 2) {
+      const c = [0, 0, 0, 0]; c[k] = a * s2;
+      v.push(v4(c[0], c[1], c[2], c[3]));
+    }
+  } else if (i === 3) {
+    const a = 1.6;
+    for (let i1 = 0; i1 < 4; i1++) for (let j1 = i1 + 1; j1 < 4; j1++)
+      for (let s1 = -1; s1 <= 1; s1 += 2) for (let s2 = -1; s2 <= 1; s2 += 2) {
+        const c = [0, 0, 0, 0]; c[i1] = a * s1; c[j1] = a * s2;
+        v.push(v4(c[0], c[1], c[2], c[3]));
+      }
+  } else if (i === 4) {
+    const a = 1.6;
+    for (let i1 = 0; i1 < 6; i1++) for (let j1 = 0; j1 < 6; j1++) {
+      const u = PI / 3 * i1, w = PI / 3 * j1;
+      v.push(v4(a * Math.cos(u), a * Math.sin(u), a * Math.cos(w), a * Math.sin(w)));
+    }
+  }
+  return v;
+}
+function d4FreshName(used, head, c) {
+  for (;;) { const nm = head + (++c.n); if (!used.has(nm)) { used.add(nm); return nm; } }
+}
+function d4PresetCmds(i, D) {
+  const used = new Set(D.objs.map(o => o.name));
+  const out = [];
+  if (i === 5) {
+    const o = d4FreshName(used, 'O', { n: 0 });
+    const g = d4FreshName(used, 'G', { n: 0 });
+    out.push(o + ' = (0, 0, 0, 0)', g + ' = sphere4(' + o + ', 2)');
+    return out;
+  }
+  const pc = { n: 0 };
+  const names = [];
+  for (const p of d4PresetPts(i)) {
+    const nm = d4FreshName(used, 'P', pc);
+    names.push(nm);
+    out.push(nm + ' = ' + d4Tuple(p));
+  }
+  out.push(d4FreshName(used, 'H', { n: 0 }) + ' = hull4(' + names.join(', ') + ')');
+  return out;
+}
+function placeD4Preset(i) {
+  const cmds = d4PresetCmds(i, doc);
+  pushUndo();
+  let last = 0;
+  for (const c of cmds) {
+    const r = runCommand(doc, c);
+    if (!r.id) { say((LANG === 'ja' ? '見本を置けませんでした：' : 'Could not place the sample: ') + r.err, true); st.undo.pop(); return; }
+    last = r.id;
+  }
+  const h = doc.get(last);
+  if (h) {
+    st.propId = h.id;
+    say(LANG === 'ja'
+      ? d4PresetName(i) + ' を置きました（コマンド ' + cmds.length + ' 本。頂点は一覧から座標で編集できます）'
+      : 'Placed ' + d4PresetName(i) + ' (' + cmds.length + ' commands; edit vertex coordinates from the list).');
+  }
+}
+// 自動回転と断面の掃引（必要なときだけ rAF で回す）
+let _d4AnimOn = false, _d4Last = 0;
+function d4AnimStep(ts) {
+  if (!_d4AnimOn) return;
+  const v = st.d4;
+  const need = (v.spin[0] || v.spin[1] || v.spin[2] || v.sweep) && anyD4Visible();
+  if (!need) { _d4AnimOn = false; return; }
+  let dt = _d4Last ? (ts - _d4Last) / 1000 : 0.016;
+  _d4Last = ts;
+  if (dt > 0.1) dt = 0.1;
+  const pln = [2, 4, 5];                    // XW・YW・ZW
+  for (let k = 0; k < 3; k++)
+    if (v.spin[k]) {
+      v.ang[pln[k]] += v.speed * dt;
+      if (v.ang[pln[k]] > PI) v.ang[pln[k]] -= 2 * PI;
+      if (v.ang[pln[k]] < -PI) v.ang[pln[k]] += 2 * PI;
+    }
+  if (v.sweep) {
+    const [lo, hi] = d4TRange(doc, v);
+    const m2 = 0.15 * (hi - lo + 0.2);
+    v.t += v.sweepDir * v.speed * 0.8 * dt * (hi - lo + 0.4) * 0.5;
+    if (v.t > hi + m2) { v.t = hi + m2; v.sweepDir = -1; }
+    if (v.t < lo - m2) { v.t = lo - m2; v.sweepDir = 1; }
+  }
+  drawNow();
+  requestAnimationFrame(d4AnimStep);
+}
+function ensureD4Anim() {
+  const v = st.d4;
+  const need = (v.spin[0] || v.spin[1] || v.spin[2] || v.sweep) && anyD4Visible();
+  if (need && !_d4AnimOn) { _d4AnimOn = true; _d4Last = 0; requestAnimationFrame(d4AnimStep); }
+}
+
 const COL = {
   point: '#d03050', line: '#1f5fd0', plane: '#2e9e6b', sphere: '#7a5ad0',
-  circle: '#d07a20', poly: '#3d6fe0', angle: '#e08a10', sel: '#00a0b0', num: '#666'
+  circle: '#d07a20', poly: '#3d6fe0', angle: '#e08a10', sel: '#00a0b0', num: '#666',
+  point4: '#b03a9e', hyper: '#7048e8', hsphere: '#9048c8'   // 四次元は紫系でそろえる
 };
 function defaultColor(k) {
   if (k === K.POINT) return COL.point;
@@ -415,6 +790,9 @@ function defaultColor(k) {
   if (k === K.CIRCLE) return COL.circle;
   if (k === K.POLY) return COL.poly;
   if (k === K.ANGLE) return COL.angle;
+  if (k === K.POINT4) return COL.point4;
+  if (k === K.HYPER) return COL.hyper;
+  if (k === K.HSPHERE) return COL.hsphere;
   return COL.num;
 }
 function newObj() {
@@ -422,6 +800,8 @@ function newObj() {
     id: 0, kind: K.NONE, op: OP.FREE, args: [], variant: 0, idx: [], parent: 0, name: '', def: '',
     ok: false, a: V(0, 0, 0), b: V(0, 0, 0), c: V(0, 0, 0), r: 0,
     topo: null, polyPts: [], t0: 0, t1: 0, dir: V(0, 0, 1),
+    // 四次元（POINT4 は a=xyz・r=w。HYPER は polyPts+pw が 4D 頂点）
+    pw: [], e4: [], cell4: [], ce4: [], f4: 0, c4: 0, h4: '',
     visible: true, showLabel: true, builtin: false, color: COL.point, note: ''
   };
 }
@@ -443,13 +823,13 @@ class Doc {
     const used = new Set();
     for (const o of this.objs) if (o.name) used.add(o.name);
     const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', a = 'abcdefghijklmnopqrstuvwxyz';
-    const letters = kind === K.POINT ? A
+    const letters = (kind === K.POINT || kind === K.POINT4) ? A
       : (kind === K.SEGMENT || kind === K.LINE || kind === K.RAY) ? a : '';
     for (let s = 0; s < 30 && letters; s++) for (const ch of letters) {
       const n = ch + (s ? s : ''); if (!used.has(n)) return n;
     }
     const pre = { plane: 'p', circle: 'c', sphere: 's', poly: 'h', polygon: 'f',
-                  angle: 'w', number: 'n', triangle: 't' }[kind] || 'x';
+                  angle: 'w', number: 'n', triangle: 't', hyper: 'H', hsphere: 'G' }[kind] || 'x';
     for (let i = 1; i < 999; i++) { const n = pre + i; if (!used.has(n)) return n; }
     return '?';
   }
@@ -864,8 +1244,43 @@ function finiteObj(o) {
   for (const p of o.polyPts) if (!finiteV(p)) return false;
   return true;
 }
+function evalObj4(D, o) {
+  // 四次元の評価。true を返したら処理済み。
+  if (o.op === OP.XYZW) { o.kind = K.POINT4; o.ok = true; return true; }
+  if (o.op === OP.HULL4) {
+    const pts = [], ws = [];
+    for (const id of o.args) {
+      const q = D.get(id);
+      if (!q || !q.ok || q.kind !== K.POINT4) {
+        o.note = 'hull4 の引数は 4 次元の点（(x, y, z, w) で作る）だけです';
+        return true;
+      }
+      pts.push(q.a); ws.push(q.r);
+    }
+    const h = d4Hash(pts, ws);
+    if (h === o.h4 && o.e4.length) { o.kind = K.HYPER; o.ok = true; return true; }
+    o.polyPts = pts; o.pw = ws; o.h4 = h;
+    if (!d4BuildHull(o)) { o.h4 = ''; return true; }
+    o.kind = K.HYPER; o.ok = true;
+    return true;
+  }
+  if (o.op === OP.HSPHERE) {
+    const ce = o.args.length > 0 ? D.get(o.args[0]) : null;
+    const nu = o.args.length > 1 ? D.get(o.args[1]) : null;
+    if (!ce || !ce.ok || ce.kind !== K.POINT4) { o.note = '超球の中心は 4 次元の点で与えてください'; return true; }
+    if (!nu || !nu.ok || nu.kind !== K.NUMBER || nu.r <= 1e-12) { o.note = '超球の半径は正の数で与えてください'; return true; }
+    o.kind = K.HSPHERE;
+    o.a = ce.a;                              // 中心の xyz
+    o.b = V(ce.r, 0, 0);                     // 中心の w は b.x に置く
+    o.r = nu.r;
+    o.ok = true;
+    return true;
+  }
+  return false;
+}
 function evalObj(D, o) {
   o.ok = false; o.note = '';
+  if (evalObj4(D, o)) return;
   const A = k => (k < o.args.length) ? D.get(o.args[k]) : null;
   const pts = n => {
     const r = [];
@@ -1246,7 +1661,8 @@ const FN_TABLE = [
   ['circumsphere', OP.CIRCUMSPHERE, 1, 1], ['insphere', OP.INSPHERE, 1, 1],
   ['maxinsphere', OP.MAXINSPHERE, 1, 1], ['distance', OP.DISTANCE, 2, 2],
   ['length', OP.LENGTH, 1, 1], ['area', OP.AREA, 1, 1], ['volume', OP.VOLUME, 1, 1],
-  ['radius', OP.RADIUS, 1, 1], ['center', OP.CENTER, 1, 1], ['pointon', OP.ON_OBJ, 1, 1]
+  ['radius', OP.RADIUS, 1, 1], ['center', OP.CENTER, 1, 1], ['pointon', OP.ON_OBJ, 1, 1],
+  ['hull4', OP.HULL4, 5, 64], ['sphere4', OP.HSPHERE, 2, 2]
 ];
 const ALIAS = {
   '点': 'point', '中点': 'midpoint', '線分': 'segment', '直線': 'line', '半直線': 'ray',
@@ -1259,7 +1675,8 @@ const ALIAS = {
   '重心': 'centroid', '頂点重心': 'vertexcentroid', '表面重心': 'surfacecentroid',
   '外接球': 'circumsphere', '外心': 'circumsphere', '内接球': 'insphere', '内心': 'insphere',
   '最大内接球': 'maxinsphere', '距離': 'distance', '長さ': 'length', '面積': 'area',
-  '体積': 'volume', '半径': 'radius', '中心': 'center', '対象上の点': 'pointon'
+  '体積': 'volume', '半径': 'radius', '中心': 'center', '対象上の点': 'pointon',
+  '凸包4': 'hull4', '多胞体': 'hull4', '超球': 'sphere4'
 };
 function lookupFn(raw) {
   let s = ALIAS[raw] || raw;
@@ -1338,7 +1755,7 @@ function parseExprBody(P, hidden, s, skip) {
   if (s[P.i] === '(') {
     P.i++;
     const v = [];
-    for (let k = 0; k < 3; k++) {
+    for (let k = 0; k < 4; k++) {
       skip();
       // 指数つき（1.5e-7 など）も読む。計算結果を貼り付けたときに必要になる。
       const m = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?/.exec(s.slice(P.i));
@@ -1346,14 +1763,22 @@ function parseExprBody(P, hidden, s, skip) {
       if (!isFinite(parseFloat(m[0]))) { P.err = '座標の数が大きすぎます'; return 0; }
       v.push(parseFloat(m[0])); P.i += m[0].length;
       skip();
-      if (k < 2) { if (s[P.i] !== ',') { P.err = '座標は (x, y, z) の形です'; return 0; } P.i++; }
+      if (k < 3) { if (s[P.i] !== ',') break; P.i++; }   // 3 つで閉じれば 3D、4 つなら 4D
     }
+    if (v.length < 3) { P.err = '座標は (x, y, z) か (x, y, z, w) の形です'; return 0; }
     skip();
     if (s[P.i] !== ')') { P.err = "')' がありません"; return 0; }
     P.i++;
     const o = newObj();
-    o.op = OP.XYZ; o.kind = K.POINT; o.a = V(v[0], v[1], v[2]);
-    o.def = `(${v[0]}, ${v[1]}, ${v[2]})`; o.visible = !hidden;
+    if (v.length === 4) {                    // 四次元の点：a = xyz、r = w
+      o.op = OP.XYZW; o.kind = K.POINT4;
+      o.a = V(v[0], v[1], v[2]); o.r = v[3];
+      o.def = d4Tuple(v4(v[0], v[1], v[2], v[3]));
+    } else {
+      o.op = OP.XYZ; o.kind = K.POINT; o.a = V(v[0], v[1], v[2]);
+      o.def = `(${v[0]}, ${v[1]}, ${v[2]})`;
+    }
+    o.visible = !hidden;
     return P.doc.add(o);
   }
   const save = P.i;
@@ -1430,6 +1855,11 @@ function coordsOnly(s) {
   const m = /^\s*\(\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*,\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*,\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*\)\s*$/.exec(s);
   return m ? V(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])) : null;
 }
+function coordsOnly4(s) {
+  const NUM = '([+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?)';
+  const m = new RegExp('^\\s*\\(\\s*' + NUM + '\\s*,\\s*' + NUM + '\\s*,\\s*' + NUM + '\\s*,\\s*' + NUM + '\\s*\\)\\s*$').exec(s);
+  return m ? { p: V(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])), w: parseFloat(m[4]) } : null;
+}
 function runCommand(D, line) {
   let s = line.trim();
   if (!s) return { id: 0, err: '' };
@@ -1446,9 +1876,20 @@ function runCommand(D, line) {
   // 動かせるのは自由点と、対象の上に乗った点（後者はいちばん近い所へ寄る）。
   if (wantName) {
     const ex = D.byName(wantName);
+    // 4D 点の再代入（P = (x, y, z, w)）：座標を書き換えて全体を作り直す
+    const p4 = ex ? coordsOnly4(s) : null;
+    if (ex && p4) {
+      if (ex.kind === K.POINT) return { id: 0, err: wantName + ' は 3 次元の点です（座標は 3 つで書きます）' };
+      if (ex.kind !== K.POINT4) return { id: 0, err: wantName + ' は 4 次元の点ではありません' };
+      ex.a = p4.p; ex.r = p4.w;
+      ex.def = d4Tuple(v4(p4.p.x, p4.p.y, p4.p.z, p4.w));
+      D.recompute();
+      return { id: ex.id, err: '', moved: true };
+    }
     const p = ex ? coordsOnly(s) : null;
     if (ex && p) {
       if (ex.builtin) return { id: 0, err: wantName + ' は動かせません' };
+      if (ex.kind === K.POINT4) return { id: 0, err: wantName + ' は 4 次元の点です（座標は 4 つで書きます）' };
       if (ex.kind !== K.POINT) return { id: 0, err: wantName + ' は点ではありません' };
       if (ex.op === OP.ON_OBJ) {
         const host = ex.args.length ? D.get(ex.args[0]) : null;
@@ -1533,7 +1974,11 @@ const st = {
   showGrid: true, showAxes: true, showLabels: true, dark: false,
   planeAlpha: 0.22, sphereAlpha: 0.17, solidAlpha: 0.28,
   msg: '', msgErr: false, hist: [], histPos: -1,
-  undo: [], redo: []
+  undo: [], redo: [],
+  // 四次元の見え方（作図データではなく視点。保存対象外）
+  d4: { ang: [0, 0, 0, 0, 0, 0], t: 0, dist: 3.5, persp: true, showProj: true, showSect: true,
+        spin: [false, false, false], speed: 0.6, sweep: false, sweepDir: 1 },
+  d4preset: 1, d4secV: -1, d4secF: -1
 };
 function say(m, err) { st.msg = m || ''; st.msgErr = !!err; }
 function pushUndo() {
@@ -1569,6 +2014,12 @@ function fitView() {
     else if (o.kind === K.TRIANGLE) { acc(o.a); acc(o.b); acc(o.c); }
     else if (o.kind === K.SPHERE || o.kind === K.CIRCLE) { acc(sub(o.a, V(o.r, o.r, o.r))); acc(add(o.a, V(o.r, o.r, o.r))); }
     else if (o.kind === K.POLY) for (const p of o.polyPts) acc(p);
+    else if (o.kind === K.POINT4) acc(d4PointPos(o));
+    else if (o.kind === K.HYPER) for (const q of d4RotAll(o, st.d4)) acc(d4place(st.d4, q));
+    else if (o.kind === K.HSPHERE) {
+      const c = d4place(st.d4, d4rot(st.d4, v4(o.a.x, o.a.y, o.a.z, o.b.x)));
+      acc(sub(c, V(o.r, o.r, o.r))); acc(add(c, V(o.r, o.r, o.r)));
+    }
   }
   if (!any) { cam.target = V(0, 0, 0); cam.dist = 22; return; }
   cam.target = mul(add(lo, hi), 0.5);
@@ -1886,6 +2337,68 @@ function buildScene() {
         }
         break;
       }
+      case K.POINT4: {                     // 4D の点：回して落とした位置に（ラベルも追従）
+        const p = P(d4PointPos(o)); if (!p) break;
+        items.push({ t: 2, d: -1e9 + p.z * 1e-6, x: p.x, y: p.y, r: hi ? 7 : 5.6, col });
+        break;
+      }
+      case K.HSPHERE: {
+        const c4 = d4rot(st.d4, v4(o.a.x, o.a.y, o.a.z, o.b.x));
+        if (st.d4.showProj) {                // 6 つの座標大円（回転が見える）
+          const N = LOD(48, 20);
+          for (let k = 0; k < 6; k++) {
+            let prev = null;
+            for (let i = 0; i <= N; i++) {
+              const t = 2 * PI * i / N;
+              const vv = [0, 0, 0, 0];
+              vv[D4_PL[k][0]] = Math.cos(t) * o.r;
+              vv[D4_PL[k][1]] = Math.sin(t) * o.r;
+              const q = d4place(st.d4, d4rot(st.d4,
+                v4(o.a.x + vv[0], o.a.y + vv[1], o.a.z + vv[2], o.b.x + vv[3])));
+              if (prev) seg(prev, q, col, .45, 1.5 * wm, 1, -BI);
+              prev = q;
+            }
+          }
+        }
+        if (st.d4.showSect) {                // 断面：半径 √(r² − (t−w)²) の球
+          const dw = st.d4.t - c4.w;
+          const rr2 = o.r * o.r - dw * dw;
+          if (rr2 > 1e-12) {
+            const r3 = Math.sqrt(rr2);
+            const c3 = V(c4.x, c4.y, c4.z);
+            const p = P(c3);
+            const D2 = len(sub(cam.eye, c3));
+            if (p && D2 > r3 * 1.0001) {
+              const sr = cam.f * r3 / Math.sqrt(D2 * D2 - r3 * r3);
+              items.push({ t: 3, d: cam.depthOf(c3) + r3, x: p.x, y: p.y, r: sr, col, front: false });
+              items.push({ t: 3, d: cam.depthOf(c3) - r3, x: p.x, y: p.y, r: sr, col, front: true });
+            }
+          }
+        }
+        break;
+      }
+      case K.HYPER: {
+        const rp = d4RotAll(o, st.d4);
+        if (st.d4.showProj) {                // 射影の骨組み（辺）
+          const pj = rp.map(p => d4place(st.d4, p));
+          for (let e = 0; e < o.e4.length; e += 2)
+            seg(pj[o.e4[e]], pj[o.e4[e + 1]], col, hi ? .85 : .5, 1.6 * wm, LOD(6, 2), -BI);
+        }
+        if (st.d4.showSect) {                // 断面の立体（w = t）
+          const sec = d4Section(o, rp, st.d4.t);
+          if (sec.face.length) {
+            for (const f of sec.face) {
+              const c0 = sec.pt[f[0]];
+              for (let k = 1; k + 1 < f.length; k++)
+                tri(c0, sec.pt[f[k]], sec.pt[f[k + 1]], col, st.solidAlpha);
+              for (let k = 0; k < f.length; k++)
+                seg(sec.pt[f[k]], sec.pt[f[(k + 1) % f.length]], col, .92, 2 * wm, LOD(4, 1), -2 * BI);
+            }
+            st.d4secV = sec.pt.length; st.d4secF = sec.face.length;
+          } else { st.d4secV = 0; st.d4secF = 0; }
+        }
+        break;
+      }
       case K.SPHERE: {
         const p = P(o.a); if (!p) break;
         const D = len(sub(cam.eye, o.a));
@@ -1990,6 +2503,15 @@ function drawNow() {
       if (!o.ok || !o.visible || !o.showLabel || o.kind === K.NUMBER) continue;
       let anchor = null;
       if (o.kind === K.POINT) anchor = o.a;
+      else if (o.kind === K.POINT4) anchor = d4PointPos(o);
+      else if (o.kind === K.HSPHERE) anchor = d4place(st.d4, d4rot(st.d4, v4(o.a.x, o.a.y, o.a.z, o.b.x)));
+      else if (o.kind === K.HYPER) {
+        if (!o.polyPts.length) continue;
+        let c4 = v4(0, 0, 0, 0);
+        for (let i = 0; i < o.polyPts.length; i++)
+          c4 = add4(c4, v4(o.polyPts[i].x, o.polyPts[i].y, o.polyPts[i].z, o.pw[i]));
+        anchor = d4place(st.d4, d4rot(st.d4, mul4(c4, 1 / o.polyPts.length)));
+      }
       else if (o.kind === K.SEGMENT) anchor = mul(add(o.a, o.b), .5);
       else if (o.kind === K.LINE || o.kind === K.RAY) anchor = add(o.a, mul(sub(o.b, o.a), 1.4));
       else if (o.kind === K.TRIANGLE) anchor = mul(add(add(o.a, o.b), o.c), 1 / 3);
@@ -2008,6 +2530,7 @@ function drawNow() {
   const hintEl = document.getElementById('hint');
   const hintTxt = toolHint(T(st.tool));
   if (hintEl._last !== hintTxt) { hintEl._last = hintTxt; hintEl.textContent = hintTxt; }
+  if (_d4Info) _d4Info();      // 断面の頂点・面の数と t は描くたびに決まるので、ここで札に反映する
   renderMsg();
 }
 function renderMsg() {
@@ -2029,10 +2552,11 @@ function pickObject(mx, my) {
   const rd = cam.rayDir(mx, my);
   let best = 0, bestScore = 1e18, bestHit = V(0, 0, 0), bestSub = null;
   for (const o of doc.objs) {
-    if (!o.ok || !o.visible || o.kind !== K.POINT) continue;
-    const p = cam.project(o.a); if (!p) continue;
+    if (!o.ok || !o.visible || (o.kind !== K.POINT && o.kind !== K.POINT4)) continue;
+    const pos = o.kind === K.POINT4 ? d4PointPos(o) : o.a;   // 4D 点は今の見た目の位置で拾う
+    const p = cam.project(pos); if (!p) continue;
     const d = Math.hypot(p.x - mx, p.y - my);
-    if (d < 13 && d < bestScore) { bestScore = d; best = o.id; bestHit = o.a; }
+    if (d < 13 && d < bestScore) { bestScore = d; best = o.id; bestHit = pos; }
   }
   if (best) return { id: best, hit: bestHit, sub: null };
 
@@ -2339,7 +2863,17 @@ window.addEventListener('mousemove', ev => {
   } else if (st.orbiting) {
     // 左右の回転は「図をつかんで回す」向き（右へ引けば図も右へ回る）。
     // 上下の回転も平行移動も同じ向きなので、三つの操作で流儀が揃う。
-    cam.yaw -= (p.x - st.lastX) * .008; cam.pitch += (p.y - st.lastY) * .008;
+    // Ctrl（Mac では Option）を押しながらなら四次元の回転（横＝XW、縦＝YW。Shift も押すと横＝ZW）。
+    if ((ev.ctrlKey || ev.altKey) && anyD4Visible()) {
+      st.d4.ang[ev.shiftKey ? 5 : 2] += (p.x - st.lastX) * .008;
+      st.d4.ang[4] += (p.y - st.lastY) * .008;
+      for (let k = 0; k < 6; k++) {
+        if (st.d4.ang[k] > PI) st.d4.ang[k] -= 2 * PI;
+        if (st.d4.ang[k] < -PI) st.d4.ang[k] += 2 * PI;
+      }
+    } else {
+      cam.yaw -= (p.x - st.lastX) * .008; cam.pitch += (p.y - st.lastY) * .008;
+    }
   } else if (st.panning) {
     const k = cam.dist * .0016;
     cam.target = add(sub(cam.target, mul(cam.right, (p.x - st.lastX) * k)), mul(cam.up, (p.y - st.lastY) * k));
@@ -2535,6 +3069,11 @@ function objValue(o) {
       return (ja ? '方向 (' : 'Direction (') + d.x.toFixed(3) + ', ' + d.y.toFixed(3) + ', ' + d.z.toFixed(3) + ')';
     }
     case K.POLY: return `V=${o.topo.vertIdx.length} E=${o.topo.edges.length} F=${o.topo.faces.length}`;
+    case K.POINT4: return `(${o.a.x.toFixed(3)}, ${o.a.y.toFixed(3)}, ${o.a.z.toFixed(3)}, ${o.r.toFixed(3)})`;
+    case K.HYPER: return ja ? `頂点 ${o.polyPts.length}　辺 ${o.e4.length / 2}　面 ${o.f4}　胞 ${o.c4}`
+      : `V=${o.polyPts.length} E=${o.e4.length / 2} F=${o.f4} C=${o.c4}`;
+    case K.HSPHERE: return ja ? `半径 ${o.r.toFixed(5)}（中心 w=${o.b.x.toFixed(3)}）`
+      : `Radius ${o.r.toFixed(5)} (center w=${o.b.x.toFixed(3)})`;
     case K.POLYGON: return ja ? (o.polyPts.length + ' 角形　面積 ' + o.r.toFixed(5))
       : (o.polyPts.length + '-gon, area ' + o.r.toFixed(5));
   }
@@ -2669,7 +3208,7 @@ function buildList() {
     }
   }
 }
-let _optsBuilt = false, _optSync = [];
+let _optsBuilt = false, _optSync = [], _d4Info = null;
 function buildOpts() {
   if (_optsBuilt) { for (const fn of _optSync) fn(); return; }
   _optsBuilt = true; _optSync = [];
@@ -2711,6 +3250,90 @@ function buildOpts() {
   sl(ja ? '平面の不透明度' : 'Plane opacity', () => st.planeAlpha, v => st.planeAlpha = v, 0, .6);
   sl(ja ? '球の不透明度' : 'Sphere opacity', () => st.sphereAlpha, v => st.sphereAlpha = v, 0, .5);
   sl(ja ? '立体の不透明度' : 'Solid opacity', () => st.solidAlpha, v => st.solidAlpha = v, 0, .7);
+  // ---- 四次元（射影と断面。対象はコマンドで座標明示して作る）----
+  h(ja ? '四次元' : '4D');
+  {
+    const bPreset = document.createElement('button');
+    bPreset.className = 'wide';
+    bPreset.onclick = () => { st.d4preset = (st.d4preset + 1) % d4PresetCount(); refresh(); };
+    o.appendChild(bPreset);
+    const bPlace = document.createElement('button');
+    bPlace.className = 'wide';
+    bPlace.textContent = ja ? 'この見本を置く（座標のコマンド列）' : 'Place sample (as coordinate commands)';
+    bPlace.onclick = () => { placeD4Preset(st.d4preset); refresh(); };
+    o.appendChild(bPlace);
+    const hint = document.createElement('div');
+    hint.className = 'sl';
+    hint.textContent = ja
+      ? 'コマンド欄で (x, y, z, w) と打つと 4D の点、hull4(P1, …) でその凸包ができます。'
+      : 'Type (x, y, z, w) in the command bar for a 4D point, and hull4(P1, …) for its convex hull.';
+    o.appendChild(hint);
+    const box = document.createElement('div');       // 4D があるときだけ見せる操作類
+    o.appendChild(box);
+    const ck4 = (t, get, set) => {
+      const l = document.createElement('label'); l.className = 'ck';
+      const i = document.createElement('input'); i.type = 'checkbox'; i.checked = get();
+      i.onchange = () => { set(i.checked); ensureD4Anim(); refresh(); };
+      _optSync.push(() => { if (i.checked !== get()) i.checked = get(); });
+      l.append(i, document.createTextNode(t)); box.appendChild(l);
+    };
+    const mkSl = (t, get, set, min, max) => {
+      const d = document.createElement('div'); d.className = 'sl';
+      d.textContent = t + '  ' + get().toFixed(2);
+      const i = document.createElement('input');
+      i.type = 'range'; i.min = min; i.max = max; i.step = 0.01; i.value = get();
+      i.oninput = () => { set(parseFloat(i.value)); d.firstChild.textContent = t + '  ' + get().toFixed(2); draw(); };
+      d.appendChild(i); box.appendChild(d);
+      return { d, i, t };
+    };
+    const slT = mkSl(ja ? '断面の位置 t' : 'Slice position t', () => st.d4.t, v => st.d4.t = v, -3, 3);
+    mkSl(ja ? '4D 視点の距離' : '4D eye distance', () => st.d4.dist, v => st.d4.dist = v, 2, 8);
+    ck4(ja ? '射影（骨組み）を描く' : 'Draw projection (wireframe)', () => st.d4.showProj, v => st.d4.showProj = v);
+    ck4(ja ? '断面（w = t の切り口）を描く' : 'Draw cross-section (w = t)', () => st.d4.showSect, v => st.d4.showSect = v);
+    ck4(ja ? '透視で落とす（近くの w が大きく）' : 'Perspective projection', () => st.d4.persp, v => st.d4.persp = v);
+    ck4(ja ? '回転 XW（Ctrl+ドラッグ横）' : 'Spin XW (Ctrl+drag →)', () => st.d4.spin[0], v => st.d4.spin[0] = v);
+    ck4(ja ? '回転 YW（Ctrl+ドラッグ縦）' : 'Spin YW (Ctrl+drag ↓)', () => st.d4.spin[1], v => st.d4.spin[1] = v);
+    ck4(ja ? '回転 ZW（Ctrl+Shift+横）' : 'Spin ZW (Ctrl+Shift+→)', () => st.d4.spin[2], v => st.d4.spin[2] = v);
+    ck4(ja ? '断面を往復させる' : 'Sweep the slice', () => st.d4.sweep, v => st.d4.sweep = v);
+    mkSl(ja ? '速さ' : 'Speed', () => st.d4.speed, v => st.d4.speed = v, 0.1, 2);
+    const bReset = document.createElement('button');
+    bReset.className = 'wide';
+    bReset.textContent = ja ? '回転と断面をもとに戻す' : 'Reset rotation & slice';
+    bReset.onclick = () => { st.d4.ang = [0, 0, 0, 0, 0, 0]; st.d4.t = 0; st.d4.sweepDir = 1; refresh(); };
+    box.appendChild(bReset);
+    const info = document.createElement('div');
+    info.className = 'sl';
+    box.appendChild(info);
+    // 毎フレーム呼んでも軽いように、書き換えは値が変わった時だけにする
+    let c1 = '', c2 = null, c3 = '', cMin = '', cMax = '';
+    const syncD4 = () => {
+      const lbl = (ja ? '見本：' : 'Sample: ') + d4PresetName(st.d4preset);
+      if (c1 !== lbl) { c1 = lbl; bPreset.textContent = lbl; }
+      const has = anyD4Visible();
+      if (c2 !== has) { c2 = has; box.style.display = has ? '' : 'none'; hint.style.display = has ? 'none' : ''; }
+      if (has) {
+        const [lo, hi] = d4TRange(doc, st.d4);
+        const m2 = 0.2 * (hi - lo) + 0.2;
+        const mn = (lo - m2).toFixed(2), mx = (hi + m2).toFixed(2);
+        if (cMin !== mn) { cMin = mn; slT.i.min = mn; }
+        if (cMax !== mx) { cMax = mx; slT.i.max = mx; }
+        st.d4.t = clampd(st.d4.t, lo - m2, hi + m2);
+        if (Math.abs(parseFloat(slT.i.value) - st.d4.t) > 1e-9) slT.i.value = st.d4.t;
+        const it = st.d4secV >= 0
+          ? (ja ? `断面：頂点 ${st.d4secV}・面 ${st.d4secF} ／ t = ${st.d4.t.toFixed(3)}`
+                : `Section: ${st.d4secV} vertices, ${st.d4secF} faces / t = ${st.d4.t.toFixed(3)}`)
+          : ('t = ' + st.d4.t.toFixed(3));
+        if (c3 !== it) {
+          c3 = it; info.textContent = it;
+          slT.d.firstChild.textContent = slT.t + '  ' + st.d4.t.toFixed(2);
+        }
+      }
+      ensureD4Anim();
+    };
+    _optSync.push(syncD4);
+    _d4Info = syncD4;
+    syncD4();
+  }
   h(ja ? '操作' : 'Actions');
   grid([
     [ja ? '全体を表示' : 'Fit view', () => { fitView(); refresh(); }],
@@ -2743,6 +3366,7 @@ function scriptText() {
   for (const o of doc.objs) {
     if (o.builtin) continue;                   // 座標軸は読込側で用意する
     if (o.op === OP.FREE || o.op === OP.XYZ) out.push(`${o.name} = (${o.a.x}, ${o.a.y}, ${o.a.z})`);
+    else if (o.op === OP.XYZW) out.push(`${o.name} = (${o.a.x}, ${o.a.y}, ${o.a.z}, ${o.r})`);
     else if (o.op === OP.NUMBER) out.push(`${o.name} = ${o.r}`);
     else if (o.op === OP.POLY_EDGE || o.op === OP.POLY_FACE) {
       const h = doc.get(o.args[0]); if (!h) continue;
@@ -2833,7 +3457,8 @@ try {
 const KNAME_EN = {
   point: 'Point', segment: 'Segment', line: 'Line', ray: 'Ray', triangle: 'Triangle',
   plane: 'Plane', circle: 'Circle', sphere: 'Sphere', poly: 'Polyhedron', polygon: 'Polygon',
-  angle: 'Angle', number: 'Number', none: '—'
+  angle: 'Angle', number: 'Number', none: '—',
+  point4: '4D point', hyper: 'Polytope', hsphere: 'Hypersphere'
 };
 const KNAME_JA2EN = Object.fromEntries(Object.keys(KNAME).map(k => [KNAME[k], KNAME_EN[k]]));
 function kindName(k) { return LANG === 'ja' ? KNAME[k] : (KNAME_EN[k] || KNAME[k]); }
@@ -2892,6 +3517,18 @@ const AXIS_EN = { 'x軸': 'X axis', 'y軸': 'Y axis', 'z軸': 'Z axis' };
 // 完全一致で引けるものは EXACT_MAP、名前や数を挟むものは正規表現で。
 // どれにも当たらなければ日本語のまま出す（読めない英語より、そのほうが安全）。
 const EXACT_MAP = {
+  '四次元の立体には、点が 5 個以上必要です': 'A 4-D solid needs at least 5 points',
+  '点が多すぎます（四次元の凸包は 64 個まで。総当たりの予算です）': 'Too many points (a 4-D hull takes up to 64 — the brute-force budget)',
+  '重なりを除くと点が 5 個未満です': 'Fewer than 5 distinct points after merging duplicates',
+  '点が 4 次元的に広がっていません（w がすべて同じ、など）。3 次元に収まる形は、従来の凸包（hull）をお使いください。':
+    'The points do not span 4 dimensions (e.g. all w equal). For shapes that fit in 3-D, use the ordinary hull.',
+  '四次元の凸包が作れませんでした（点の与え方をご確認ください）': 'Could not build the 4-D hull (please check the given points)',
+  '胞の形が退化しています': 'A cell is degenerate',
+  '胞の凸包が作れませんでした': 'Could not build the hull of a cell',
+  'hull4 の引数は 4 次元の点（(x, y, z, w) で作る）だけです': 'hull4 takes only 4-D points (created as (x, y, z, w))',
+  '超球の中心は 4 次元の点で与えてください': 'Give the hypersphere center as a 4-D point',
+  '超球の半径は正の数で与えてください': 'Give the hypersphere radius as a positive number',
+  '座標は (x, y, z) か (x, y, z, w) の形です': 'Coordinates take the form (x, y, z) or (x, y, z, w)',
   '3 点以上が必要です': 'At least 3 points are required',
   'すべての点が一直線上にあります': 'All the points are collinear',
   '同一平面上にありません': 'Not coplanar',
@@ -2942,6 +3579,9 @@ const EXACT_MAP = {
 for (const td of TOOLS) if (TOOL_EN[td[0]]) { EXACT_MAP[td[1]] = TOOL_EN[td[0]].label; EXACT_MAP[td[2]] = TOOL_EN[td[0]].hint; }
 
 const TR_RULES = [
+  [/^(.+?) は 3 次元の点です（座標は 3 つで書きます）$/g, (_, n) => `${n} is a 3-D point (write 3 coordinates)`],
+  [/^(.+?) は 4 次元の点です（座標は 4 つで書きます）$/g, (_, n) => `${n} is a 4-D point (write 4 coordinates)`],
+  [/^(.+?) は 4 次元の点ではありません$/g, (_, n) => `${n} is not a 4-D point`],
   [/(.+?) を作りました（交わり）/g, (_, n) => `Created ${n} (intersection)`],
   [/(.+?) を作りました（(.+?)）/g, (_, n, k) => `Created ${n} (${KNAME_JA2EN[k] || k})`],
   [/(.+?) を作りました$/g, (_, n) => `Created ${n}`],
@@ -3332,6 +3972,131 @@ function runSelfTest() {
     loadText(saved); st.tool = savedTool; st.sel = []; st.msg = '';
   }
   // 多言語対応：LANG の値に関わらず内部状態（st.msg・自己テスト）は日本語のまま、
+  // ---- 四次元（C++ 版 geo4 の自己診断と同じ観点）----
+  {
+    const D4 = new Doc(); D4.addAxes();
+    const r4 = t => runCommand(D4, t);
+    const g4 = t => D4.byName(t);
+    let rr = r4('P1 = (1, -2, 0.5, 3)');
+    chk('4D: (x, y, z, w) で 4D 点ができる', !rr.err && !!g4('P1') && g4('P1').kind === K.POINT4);
+    num('4D: w 成分が入る', g4('P1').r, 3, 1e-12);
+    rr = r4('P1 = (0, 0, 0, -1)');
+    chk('4D: 4 成分の再代入で動く', !rr.err && rr.moved === true && g4('P1').r === -1);
+    rr = r4('P1 = (1, 2, 3)');
+    chk('4D: 4D 点に 3 成分を書くと断る', !!rr.err && rr.err.includes('4 次元の点です'));
+    r4('Q1 = (1, 1, 1)');
+    rr = r4('Q1 = (1, 1, 1, 1)');
+    chk('4D: 3D 点に 4 成分を書くと断る', !!rr.err && rr.err.includes('3 次元の点です'));
+
+    // 見本 5 種の (頂点, 辺, 面, 胞) とオイラー標数 V−E+F−C=0
+    const want = [[5, 10, 10, 5], [16, 32, 24, 8], [8, 24, 32, 16], [24, 96, 96, 24], [36, 72, 48, 12]];
+    const nm5 = ['正五胞体', '正八胞体', '正十六胞体', '正二十四胞体', '六角二重柱'];
+    const kept = [];
+    for (let i = 0; i < 5; i++) {
+      const DD = new Doc(); DD.addAxes();
+      let perr = '';
+      for (const c of d4PresetCmds(i, DD)) { const q = runCommand(DD, c); if (q.err && !perr) perr = q.err; }
+      const H = DD.objs.find(o => o.kind === K.HYPER);
+      kept.push(H || null);
+      const got = H ? [H.polyPts.length, H.e4.length / 2, H.f4, H.c4] : [0, 0, 0, 0];
+      chk(`4D: ${nm5[i]} (V,E,F,C)=(${want[i].join(',')}) 実測 (${got.join(',')})${perr ? ' err=' + perr : ''}`,
+        !perr && got.join(',') === want[i].join(','));
+      if (H) chk(`4D: ${nm5[i]} オイラー V−E+F−C=0`, got[0] - got[1] + got[2] - got[3] === 0);
+    }
+
+    // 断面：テッセラクト w=0 → 立方体（8 頂点・6 面）、範囲外 → 空、回しても閉じる
+    const ID4 = { ang: [0, 0, 0, 0, 0, 0], t: 0, dist: 3.5, persp: false };
+    const RV4 = { ang: [0.3, 0.2, 0.7, 0.1, 0.4, 0.25], t: 0, dist: 3.5, persp: false };
+    const HT = kept[1];
+    if (HT) {
+      let sec = d4Section(HT, d4RotAll(HT, ID4), 0);
+      chk('4D: テッセラクト w=0 の断面は立方体（頂点 8・面 6）', sec.pt.length === 8 && sec.face.length === 6);
+      sec = d4Section(HT, d4RotAll(HT, ID4), 9);
+      chk('4D: 範囲外の断面は空', sec.pt.length === 0 && sec.face.length === 0);
+      sec = d4Section(HT, d4RotAll(HT, RV4), 0.2);
+      chk('4D: 回した断面も閉じた立体（頂点 ≥ 4・面 ≥ 4）', sec.pt.length >= 4 && sec.face.length >= 4);
+    }
+    const H16 = kept[2];
+    if (H16) {
+      const sec = d4Section(H16, d4RotAll(H16, ID4), 0);
+      chk('4D: 正十六胞体 w=0 の断面は正八面体（頂点 6・面 8）', sec.pt.length === 6 && sec.face.length === 8);
+    }
+
+    // 回転は等長変換（距離を保つ）
+    {
+      const a4 = v4(0.3, -1.2, 0.7, 2.1), b4 = v4(-0.5, 0.4, 1.1, -0.6);
+      num('4D: 回転は等長変換', len4(sub4(d4rot(RV4, a4), d4rot(RV4, b4))), len4(sub4(a4, b4)), 1e-12);
+    }
+
+    // 超球：sphere4(中心, 半径) と断面半径 √(r²−(t−w)²)
+    {
+      const DS = new Doc(); DS.addAxes();
+      runCommand(DS, 'O1 = (0.5, 0, 0, 0.25)');
+      const rs = runCommand(DS, 'G1 = sphere4(O1, 2)');
+      const GS = DS.byName('G1');
+      chk('4D: sphere4 で超球ができる', !rs.err && !!GS && GS.kind === K.HSPHERE && GS.r === 2 && GS.b.x === 0.25);
+      if (GS) num('4D: 超球の断面半径の式', Math.sqrt(GS.r * GS.r - (1 - GS.b.x) * (1 - GS.b.x)), Math.sqrt(4 - 0.5625), 1e-12);
+    }
+
+    // ハッシュの見張り：点が同じなら重い再計算をしない・動かせば作り直す
+    {
+      const DH = new Doc(); DH.addAxes();
+      for (const c of d4PresetCmds(0, DH)) runCommand(DH, c);
+      const b0 = g_d4HullBuilds;
+      DH.recompute();
+      chk('4D: 点が同じなら凸包を作り直さない', g_d4HullBuilds === b0);
+      const PV = DH.objs.find(o => o.kind === K.POINT4);
+      runCommand(DH, `${PV.name} = (${PV.a.x}, ${PV.a.y}, ${PV.a.z}, ${PV.r + 0.3})`);
+      chk('4D: 点を動かすと作り直す', g_d4HullBuilds === b0 + 1);
+    }
+
+    // 4 次元に広がらない点集合（全部 w=0）は日本語で断る
+    {
+      const DR = new Doc(); DR.addAxes();
+      runCommand(DR, 'R0 = (0, 0, 0, 0)'); runCommand(DR, 'R1 = (2, 0, 0, 0)');
+      runCommand(DR, 'R2 = (0, 2, 0, 0)'); runCommand(DR, 'R3 = (0, 0, 2, 0)');
+      runCommand(DR, 'R4 = (1, 1, 1, 0)');
+      const rf = runCommand(DR, 'HF = hull4(R0, R1, R2, R3, R4)');
+      chk('4D: 4 次元に広がらない点集合は断る', !!rf.err && rf.err.includes('広がって'));
+    }
+
+    // 保存 → 読み込みの往復（scriptText / loadText。既定の作図は退避して戻す）
+    {
+      const keep = JSON.stringify(doc.objs.map(o => ({ ...o, topo: null })));
+      const keepN = doc.nextId, keepU = st.undo.length;
+      loadText('A1 = (1, 0, 0, 0)\nA2 = (-1, 0.2, 0, 0)\nA3 = (0, 1, 0.3, 0)\nA4 = (0, 0, 1, 0)\nA5 = (0.1, 0.2, 0.3, 1.4)\nHH = hull4(A1, A2, A3, A4, A5)');
+      const H1 = doc.byName('HH');
+      chk('4D: 読み込みで多胞体ができる', !!H1 && H1.kind === K.HYPER && H1.c4 === 5);
+      const txt = scriptText();
+      chk('4D: 保存に 4 成分の座標が残る', txt.includes('(0.1, 0.2, 0.3, 1.4)') && txt.includes('hull4('));
+      loadText(txt);
+      const H2 = doc.byName('HH');
+      chk('4D: 往復しても同じ多胞体', !!H2 && H2.kind === K.HYPER && H2.c4 === 5 && H2.polyPts.length === 5);
+      while (st.undo.length > keepU) st.undo.pop();
+      doc.objs = JSON.parse(keep); doc.nextId = keepN; doc.recompute();
+    }
+
+    // 速さ：いちばん重い見本（正二十四胞体）を回して切っても 1 コマが軽い
+    {
+      const DP = new Doc(); DP.addAxes();
+      for (const c of d4PresetCmds(3, DP)) runCommand(DP, c);
+      const HP = DP.objs.find(o => o.kind === K.HYPER);
+      const vw = { ang: [0, 0, 0, 0, 0, 0], t: 0, dist: 3.5, persp: true };
+      const t0 = performance.now();
+      let acc = 0;
+      for (let f = 0; f < 60; f++) {
+        vw.ang[2] += 0.01; vw.ang[4] += 0.007;
+        vw.t = Math.sin(f * 0.1) * 1.2;
+        const rp = d4RotAll(HP, vw);
+        const sec = d4Section(HP, rp, vw.t);
+        acc += sec.pt.length;
+        for (const q of rp) d4place(vw, q);
+      }
+      const ms = (performance.now() - t0) / 60;
+      chk(`4D: 回転＋断面は 1 コマ ${ms.toFixed(3)} ms（20 ms 未満）`, ms < 20 && acc > 0);
+    }
+  }
+
   // 訳語の抜けがなく、英語表記の軸名でも同じ対象を指せることを確かめる
   {
     const savedLang = LANG;
@@ -3372,7 +4137,10 @@ window.SG = {
   runSelfTest, loadText, scriptText, refresh, draw, drawNow, fitView, T, TOOLS,
   toolClick, pickedForTool, pickObject, applyTool, deleteObjects, V, len, sub,
   materializeSub, findSub, sameSub, K, OP, Doc, makePolygon, objFacePlane,
-  getLang: () => LANG, setLang, trJP, kindName, toolLabel, toolHint, KNAME_EN, TOOL_EN
+  getLang: () => LANG, setLang, trJP, kindName, toolLabel, toolHint, KNAME_EN, TOOL_EN,
+  // 四次元（外からの検証用）
+  v4, d4rot, d4place, d4RotAll, d4Section, d4TRange, d4PresetCmds, d4PresetCount,
+  placeD4Preset, anyD4Visible, getD4Builds: () => g_d4HullBuilds
 };
 
 // ------------------------------------------------------------ 起動
