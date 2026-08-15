@@ -1350,11 +1350,22 @@ function evalObj(D, o) {
     case OP.INTERSECT: {
       const x = A(0), y = A(1);
       if (!x || !y || !x.ok || !y.ok) break;
-      let vv = o.variant;
-      if (o.args.length >= 3) { const nn = A(2); if (nn && nn.ok && nn.kind === K.NUMBER) vv = indexFromNumber(nn.r); }
+      let vv = o.variant, away = null;               // Intersect(x, y, P) で「P から遠い方の交点」
+      if (o.args.length >= 3) {
+        const nn = A(2);
+        if (nn && nn.ok && nn.kind === K.NUMBER) vv = indexFromNumber(nn.r);
+        else if (nn && nn.ok && nn.kind === K.POINT) away = nn.a;
+        else if (nn) { o.note = '3 つめの引数は番号か点にしてください'; break; }
+      }
       const t = intersectCurve(x, y);                 // 直線や円になる場合
       if (t) { o.kind = t.kind; o.a = t.a; o.b = t.b; o.r = t.r; o.ok = true; break; }
       const pp = D.isectPoints(x, y);
+      if (away && pp.length) {
+        // 「P でない方」を選ぶ。2 つの円が P で交わっているとき、もう 1 つの交点を
+        // 動かしても入れ替わらずに取り出せる（連鎖の作図に使う）。
+        let best = -1; vv = 0;
+        for (let k = 0; k < pp.length; k++) { const d = len2(sub(pp[k], away)); if (d > best) { best = d; vv = k; } }
+      }
       if (vv >= 0 && vv < pp.length) { o.kind = K.POINT; o.a = pp[vv]; o.ok = true; break; }
       o.note = pp.curved ? '交わりが面の上の円弧になるため、点としては作れません'
         : (pp.length ? '交点は ' + pp.length + ' 個しかありません' : '交わりません');
