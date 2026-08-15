@@ -3663,8 +3663,8 @@ function applyStaticText() {
   document.getElementById('bTools').textContent = LANG === 'ja' ? '道具' : 'Tools';
   document.getElementById('bPanel').textContent = LANG === 'ja' ? '一覧' : 'List';
   document.getElementById('cmd').placeholder = LANG === 'ja'
-    ? 'コマンド欄：例  Midpoint(A,B) ／ 球(A,B) ／ Angle(A,B,C) ／ 凸包(A,B,C,D)'
-    : 'Command box — e.g. Midpoint(A,B) / Sphere(A,B) / Angle(A,B,C) / Hull(A,B,C,D)';
+    ? 'コマンド欄：例  Midpoint(A,B) ／ 球(A,B) ／ 凸包(A,B,C,D)　―　Ctrl+V で貼り付け（何行でも可）'
+    : 'Command box — e.g. Midpoint(A,B) / Sphere(A,B) / Hull(A,B,C,D) — Ctrl+V pastes (any number of lines)';
 }
 function setLang(l) {
   if (l !== 'ja' && l !== 'en') return;
