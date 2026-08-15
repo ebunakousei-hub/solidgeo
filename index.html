@@ -90,7 +90,7 @@ label.ck input{accent-color:var(--accent);width:14px;height:14px}
       <div id="burger"><button id="bTools">道具</button><button id="bPanel">一覧</button></div>
     </div>
     <div id="cmdbar">
-      <input id="cmd" placeholder="コマンド欄：例  Midpoint(A,B) ／ 球(A,B) ／ Angle(A,B,C) ／ 凸包(A,B,C,D)">
+      <input id="cmd" placeholder="コマンド欄：例  Midpoint(A,B) ／ 球(A,B) ／ 凸包(A,B,C,D)　―　Ctrl+V で貼り付け（何行でも可）">
       <div id="msg"></div>
     </div>
   </div>
@@ -2966,6 +2966,25 @@ cv.addEventListener('touchend', ev => {
 }, { passive: false });
 
 const cmdEl = document.getElementById('cmd');
+// 貼り付け：1 行なら入力欄にそのまま入り、何行もあれば作図として順に実行する
+cmdEl.addEventListener('paste', ev => {
+  const t = (ev.clipboardData || window.clipboardData).getData('text');
+  if (t && pasteLines(t)) { ev.preventDefault(); cmdEl.value = ''; }
+});
+window.addEventListener('paste', ev => {
+  if (document.activeElement === cmdEl) return;      // 入力欄のときは上の処理に任せる
+  const t = (ev.clipboardData || window.clipboardData).getData('text');
+  if (t && pasteLines(t)) ev.preventDefault();
+});
+// Ctrl+C：文字を選んでいないときは、作図まるごとをコマンド列としてコピーする
+window.addEventListener('copy', ev => {
+  if (document.activeElement === cmdEl) return;
+  if (String(window.getSelection ? window.getSelection() : '')) return;
+  ev.clipboardData.setData('text/plain', scriptText());
+  ev.preventDefault();
+  say('作図をコマンド列としてコピーしました');
+  refresh();
+});
 cmdEl.addEventListener('keydown', ev => {
   if (ev.key === 'Enter') {
     const line = cmdEl.value.trim();
@@ -3408,9 +3427,12 @@ function loadScript() {
   };
   inp.click();
 }
-function loadText(text) {
+function loadText(text) { return runLines(text, true); }
+// clear = true … ファイル読込（いまの作図を捨てる）
+// clear = false … 貼り付け（いまの作図に足す）
+function runLines(text, clear) {
   pushUndo();
-  doc.clear(); doc.addAxes(); st.sel = [];
+  if (clear) { doc.clear(); doc.addAxes(); st.sel = []; }
   let ok = 0, ng = 0, first = '';
   for (const raw of text.split(/\r?\n/)) {
     let line = raw.trim();
@@ -3431,8 +3453,22 @@ function loadText(text) {
   }
   doc.recompute();
   fitView();
-  say(`読み込みました（成功 ${ok} / 失敗 ${ng}）` + (first ? '　' + first : ''), ng > 0);
+  say((clear ? `読み込みました（成功 ${ok} / 失敗 ${ng}）`
+             : `${ok + ng} 行を貼り付けて実行しました（成功 ${ok} / 失敗 ${ng}）`)
+      + (first ? '　' + first : '')
+      + (first.indexOf('使われています') >= 0 ? '　― 同じ名前の対象がすでにあります。「全消去」してから貼り付けてください' : ''),
+      ng > 0);
   return { ok, ng };
+}
+// クリップボードから貼り付ける（何行もあれば、そのまま順に実行する）
+function pasteLines(text) {
+  const lines = String(text).replace(/\r/g, '').split('\n');
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  if (!lines.length) return false;
+  if (lines.length === 1) return false;      // 1 行なら入力欄への貼り付けに任せる
+  runLines(lines.join('\n'), false);
+  refresh();
+  return true;
 }
 function savePNG() { drawNow(); cv.toBlob(b => download('zukei.png', b)); }
 
@@ -4134,7 +4170,7 @@ function runSelfTest() {
 // 外から検証できるように公開しておく
 window.SG = {
   doc, cam, st, runCommand, intersectPoints, intersectObjs, convexHull,
-  runSelfTest, loadText, scriptText, refresh, draw, drawNow, fitView, T, TOOLS,
+  runSelfTest, loadText, runLines, pasteLines, scriptText, refresh, draw, drawNow, fitView, T, TOOLS,
   toolClick, pickedForTool, pickObject, applyTool, deleteObjects, V, len, sub,
   materializeSub, findSub, sameSub, K, OP, Doc, makePolygon, objFacePlane,
   getLang: () => LANG, setLang, trJP, kindName, toolLabel, toolHint, KNAME_EN, TOOL_EN,
